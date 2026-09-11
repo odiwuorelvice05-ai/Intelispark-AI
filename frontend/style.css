@@ -1,83 +1,138 @@
+/* =========================================
+Intelispark AI - Main Styles
+========================================= */
+
+/* Reset */
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-}
+  }
 
+/* Base */
 body {
-  font-family: Arial, sans-serif;
-  background: #f5f7fb;
-  color: #111827;
-  line-height: 1.6;
+font-family: Arial, sans-serif;
+background: #f5f7fa;
+color: #111827;
+line-height: 1.6;
 }
 
+/* Header */
 header {
-  background: #111827;
-  color: white;
-  padding: 20px 40px;
+background: #111827;
+color: white;
+padding: 20px 40px;
 }
 
 header h1 {
-  font-size: 28px;
+font-size: 28px;
 }
 
-header p {
-  color: #9ca3af;
-}
-
+/* Main */
 main {
-  max-width: 1100px;
-  margin: 60px auto;
-  padding: 0 20px;
+max-width: 1100px;
+margin: 60px auto;
+padding: 20px;
+text-align: center;
 }
 
-.hero {
-  background: white;
-  padding: 60px 40px;
-  border-radius: 16px;
-  text-align: center;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+main h1 {
+font-size: 48px;
+margin-bottom: 15px;
 }
 
-.hero h2 {
-  font-size: 42px;
-  margin-bottom: 15px;
+main > p {
+font-size: 20px;
+color: #6b7280;
+margin-bottom: 35px;
 }
 
-.hero p {
-  color: #6b7280;
-  font-size: 18px;
+/* Cards */
+.card {
+max-width: 650px;
+margin: 0 auto;
+background: white;
+padding: 30px;
+border-radius: 12px;
+box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
 }
 
+.card h2 {
+font-size: 28px;
+margin-bottom: 15px;
+}
+
+.card p {
+color: #6b7280;
+font-size: 17px;
+margin-bottom: 10px;
+}
+
+/* Buttons */
 button {
-  margin-top: 25px;
-  padding: 12px 24px;
-  border: none;
-  border-radius: 8px;
-  background: #111827;
-  color: white;
-  font-size: 16px;
-  cursor: pointer;
+background: #111827;
+color: white;
+border: none;
+padding: 12px 22px;
+border-radius: 8px;
+cursor: pointer;
+font-size: 16px;
+transition: background 0.2s ease, transform 0.2s ease;
 }
 
 button:hover {
-  opacity: 0.9;
+background: #1f2937;
+transform: translateY(-1px);
 }
 
-@media (max-width: 600px) {
-  header {
-    padding: 18px 20px;
-  }
+button:active {
+transform: translateY(0);
+}
 
-  main {
-    margin: 30px auto;
-  }
+/* Mobile */
+@media (max-width: 768px) {
+header {
+padding: 16px 20px;
+}
 
-  .hero {
-    padding: 40px 20px;
-  }
+header h1 {
+font-size: 24px;
+}
 
-  .hero h2 {
-    font-size: 32px;
-  }
+main {
+margin: 30px auto;
+padding: 20px;
+}
+
+main h1 {
+font-size: 36px;
+}
+
+main > p {
+font-size: 17px;
+}
+
+.card {
+padding: 25px 20px;
+}
+
+.card h2 {
+font-size: 24px;
+}
+}
+
+/* Small Phones */
+@media (max-width: 480px) {
+main h1 {
+font-size: 30px;
+}
+
+.card {
+padding: 20px 16px;
+}
+
+button {
+width: 100%;
+}
 }
