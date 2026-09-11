@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -40,54 +42,54 @@ def health():
 @app.post("/sales/reply")
 def sales_reply(request: SalesRequest):
     try:
-        # 1. Verify the business exists.
-        business = (
+        # 1. Confirm the business exists.
+        business_result = (
             supabase
             .table("businesses")
             .select("id, name")
             .eq("id", request.business_id)
-            .single()
+            .limit(1)
             .execute()
         )
 
-        if not business.data:
+        if not business_result.data:
             raise HTTPException(
                 status_code=404,
                 detail="Business not found.",
             )
 
-        # 2. Verify the customer belongs to this business.
-        customer = (
+        # 2. Confirm the customer belongs to this business.
+        customer_result = (
             supabase
             .table("customers")
             .select("id, name, phone")
             .eq("id", request.customer_id)
             .eq("business_id", request.business_id)
-            .single()
+            .limit(1)
             .execute()
         )
 
-        if not customer.data:
+        if not customer_result.data:
             raise HTTPException(
                 status_code=404,
                 detail="Customer not found for this business.",
             )
 
-        # 3. Find an existing open conversation.
-        conversation = (
+        # 3. Find an existing open WhatsApp conversation.
+        conversation_result = (
             supabase
             .table("conversations")
             .select("id")
             .eq("business_id", request.business_id)
             .eq("customer_id", request.customer_id)
-            .eq("status", "open")
             .eq("channel", "whatsapp")
+            .eq("status", "open")
             .limit(1)
             .execute()
         )
 
-        if conversation.data:
-            conversation_id = conversation.data[0]["id"]
+        if conversation_result.data:
+            conversation_id = conversation_result.data[0]["id"]
 
         else:
             # 4. Create a new conversation.
@@ -111,7 +113,7 @@ def sales_reply(request: SalesRequest):
             conversation_id = new_conversation.data[0]["id"]
 
         # 5. Save the customer's message.
-        customer_message = (
+        saved_customer_message = (
             supabase
             .table("messages")
             .insert({
@@ -123,19 +125,19 @@ def sales_reply(request: SalesRequest):
             .execute()
         )
 
-        if not customer_message.data:
+        if not saved_customer_message.data:
             raise RuntimeError(
                 "Could not save customer message."
             )
 
-        # 6. Forge generates its response.
+        # 6. Run Forge's independent intelligence engine.
         reply = generate_sales_reply(
             customer_message=request.customer_message,
             product_context=request.product_context,
         )
 
         # 7. Save Forge's response.
-        ai_message = (
+        saved_ai_message = (
             supabase
             .table("messages")
             .insert({
@@ -147,22 +149,24 @@ def sales_reply(request: SalesRequest):
             .execute()
         )
 
-        if not ai_message.data:
+        if not saved_ai_message.data:
             raise RuntimeError(
                 "Could not save Forge response."
             )
 
         # 8. Update conversation activity.
-        (
-            supabase
-            .table("conversations")
-            .update({
-                "last_message_at": "now()"
-            })
-            .eq("id", conversation_id)
-            .execute()
-        )
+        now = datetime.now(timezone.utc).isoformat()
 
+        supabase \
+            .table("conversations") \
+            .update({
+                "last_message_at": now,
+                "updated_at": now,
+            }) \
+            .eq("id", conversation_id) \
+            .execute()
+
+        # 9. Return the result.
         return {
             "success": True,
             "conversation_id": conversation_id,
