@@ -1,40 +1,36 @@
-from app.supabase_client import supabase
-from datetime import datetime
-
-
-SYSTEM_NAME = "Forge AI"
+   from app.supabase_client import supabase
 
 
 def detect_intent(message: str) -> str:
     text = message.lower().strip()
 
     if any(word in text for word in [
-        "hello", "hi", "hey", "habari", "mambo", "good morning",
-        "good afternoon", "good evening"
+        "hello", "hi", "hey", "habari", "mambo",
+        "good morning", "good afternoon", "good evening"
     ]):
         return "greeting"
 
     if any(word in text for word in [
-        "price", "cost", "how much", "bei", "ngapi", "charges",
-        "expensive", "cheap"
+        "price", "cost", "how much", "bei", "ngapi",
+        "charges", "expensive", "cheap"
     ]):
         return "price"
 
     if any(word in text for word in [
         "available", "availability", "stock", "in stock",
-        "ipo", "mna", "available?"
+        "ipo", "mna"
     ]):
         return "availability"
 
     if any(word in text for word in [
-        "buy", "purchase", "order", "nunua", "nataka", "take it",
-        "i'll take", "i want it"
+        "buy", "purchase", "order", "nunua", "nataka",
+        "take it", "i'll take", "i want it"
     ]):
         return "purchase"
 
     if any(word in text for word in [
-        "appointment", "book", "booking", "schedule", "meeting",
-        "visit", "appointment"
+        "appointment", "book", "booking", "schedule",
+        "meeting", "visit"
     ]):
         return "appointment"
 
@@ -56,32 +52,27 @@ def generate_sales_reply(
     product_context: str = "",
 ) -> str:
     """
-    Forge AI's independent first-generation sales intelligence engine.
-
-    This version uses deterministic Python logic.
-    It does not require an external AI API.
+    Forge AI's independent sales intelligence engine.
+    No external AI API is required.
     """
 
     message = customer_message.strip()
+    context = product_context.strip()
 
     if not message:
         return "Hi! 👋 How can I help you today?"
 
     intent = detect_intent(message)
-    context = product_context.strip()
 
     if intent == "greeting":
-        return (
-            "Hi! 👋 Welcome to Forge AI. "
-            "How can I help you today?"
-        )
+        return "Hi! 👋 Welcome to Forge AI. How can I help you today?"
 
     if intent == "price":
         if context:
             return (
                 f"Sure 👍 Here is the information I have:\n\n"
                 f"{context}\n\n"
-                "Would you like to proceed with this?"
+                "Would you like to proceed?"
             )
 
         return (
@@ -91,19 +82,14 @@ def generate_sales_reply(
 
     if intent == "availability":
         if context:
-            return (
-                f"Let me help with that 👍\n\n"
-                f"{context}"
-            )
+            return f"Let me help with that 👍\n\n{context}"
 
-        return (
-            "Sure 👍 Which product would you like to check?"
-        )
+        return "Sure 👍 Which product would you like to check?"
 
     if intent == "purchase":
         if context:
             return (
-                "Great choice 👍\n\n"
+                f"Great choice 👍\n\n"
                 f"{context}\n\n"
                 "Would you like to place the order?"
             )
@@ -115,15 +101,12 @@ def generate_sales_reply(
 
     if intent == "appointment":
         return (
-            "Absolutely 👍 I can help you arrange an appointment. "
-            "What day and time would work best for you?"
+            "Absolutely 👍 What day and time would work best "
+            "for your appointment?"
         )
 
     if intent == "location":
-        return (
-            "Sure 👍 I can help you find us. "
-            "What location information would you like?"
-        )
+        return "Sure 👍 What location information would you like?"
 
     if intent == "thanks":
         return "You're welcome! 😊 Let me know if you need anything else."
