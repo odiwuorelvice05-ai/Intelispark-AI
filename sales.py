@@ -1,26 +1,53 @@
-import os
-
-from dotenv import load_dotenv
-from openai import OpenAI
-
-load_dotenv()
+from datetime import datetime
 
 
-SYSTEM_PROMPT = """
-You are Forge AI, a professional WhatsApp sales assistant for
-phone and electronics shops.
+SYSTEM_NAME = "Forge AI"
 
-Your job is to help turn customer conversations into sales.
 
-Rules:
-- Be friendly, natural, concise, and persuasive.
-- Never invent a product, price, specification, or stock status.
-- If product information is provided, use only that information.
-- If important information is missing, ask the customer a useful question.
-- Do not sound robotic.
-- Do not pressure the customer.
-- Keep WhatsApp replies short and easy to read.
-"""
+def detect_intent(message: str) -> str:
+    text = message.lower().strip()
+
+    if any(word in text for word in [
+        "hello", "hi", "hey", "habari", "mambo", "good morning",
+        "good afternoon", "good evening"
+    ]):
+        return "greeting"
+
+    if any(word in text for word in [
+        "price", "cost", "how much", "bei", "ngapi", "charges",
+        "expensive", "cheap"
+    ]):
+        return "price"
+
+    if any(word in text for word in [
+        "available", "availability", "stock", "in stock",
+        "ipo", "mna", "available?"
+    ]):
+        return "availability"
+
+    if any(word in text for word in [
+        "buy", "purchase", "order", "nunua", "nataka", "take it",
+        "i'll take", "i want it"
+    ]):
+        return "purchase"
+
+    if any(word in text for word in [
+        "appointment", "book", "booking", "schedule", "meeting",
+        "visit", "appointment"
+    ]):
+        return "appointment"
+
+    if any(word in text for word in [
+        "where", "location", "address", "located", "wapi"
+    ]):
+        return "location"
+
+    if any(word in text for word in [
+        "thank", "thanks", "asante"
+    ]):
+        return "thanks"
+
+    return "general"
 
 
 def generate_sales_reply(
@@ -28,32 +55,79 @@ def generate_sales_reply(
     product_context: str = "",
 ) -> str:
     """
-    Generate a sales reply to a customer's message.
+    Forge AI's independent first-generation sales intelligence engine.
+
+    This version uses deterministic Python logic.
+    It does not require an external AI API.
     """
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    message = customer_message.strip()
 
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not configured.")
+    if not message:
+        return "Hi! 👋 How can I help you today?"
 
-    client = OpenAI(api_key=api_key)
-
+    intent = detect_intent(message)
     context = product_context.strip()
 
-    prompt = f"""
-Customer message:
-{customer_message}
+    if intent == "greeting":
+        return (
+            "Hi! 👋 Welcome to Forge AI. "
+            "How can I help you today?"
+        )
 
-Available product information:
-{context if context else "No product information has been provided."}
+    if intent == "price":
+        if context:
+            return (
+                f"Sure 👍 Here is the information I have:\n\n"
+                f"{context}\n\n"
+                "Would you like to proceed with this?"
+            )
 
-Write the best possible WhatsApp sales response.
-"""
+        return (
+            "Sure 👍 Which product are you asking about? "
+            "Send me the product name and I'll help you."
+        )
 
-    response = client.responses.create(
-        model="gpt-5.6-luna",
-        instructions=SYSTEM_PROMPT,
-        input=prompt,
+    if intent == "availability":
+        if context:
+            return (
+                f"Let me help with that 👍\n\n"
+                f"{context}"
+            )
+
+        return (
+            "Sure 👍 Which product would you like to check?"
+        )
+
+    if intent == "purchase":
+        if context:
+            return (
+                "Great choice 👍\n\n"
+                f"{context}\n\n"
+                "Would you like to place the order?"
+            )
+
+        return (
+            "Great 👍 Tell me the product you'd like to order "
+            "and I'll help you with the next step."
+        )
+
+    if intent == "appointment":
+        return (
+            "Absolutely 👍 I can help you arrange an appointment. "
+            "What day and time would work best for you?"
+        )
+
+    if intent == "location":
+        return (
+            "Sure 👍 I can help you find us. "
+            "What location information would you like?"
+        )
+
+    if intent == "thanks":
+        return "You're welcome! 😊 Let me know if you need anything else."
+
+    return (
+        "I'd be happy to help 👍 "
+        "Could you tell me a little more about what you need?"
     )
-
-    return response.output_text.strip()
