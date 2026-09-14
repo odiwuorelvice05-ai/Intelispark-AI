@@ -4,14 +4,14 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from app.config import settings
-from app.sales import generate_sales_reply
+from app.intelligence import engine
 from app.supabase_client import supabase
 
 
 app = FastAPI(
     title=settings.app_name,
     description="Independent AI sales intelligence platform",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 
@@ -19,7 +19,6 @@ class SalesRequest(BaseModel):
     business_id: str
     customer_id: str
     customer_message: str
-    product_context: str = ""
 
 
 @app.get("/")
@@ -27,7 +26,7 @@ def root():
     return {
         "name": settings.app_name,
         "status": "online",
-        "version": "0.1.0",
+        "version": "0.2.0",
     }
 
 
@@ -36,6 +35,19 @@ def health():
     return {
         "status": "healthy",
         "environment": settings.environment,
+        "intelligence": "trained-local-model",
+    }
+
+
+@app.get("/ai/status")
+def ai_status():
+    return {
+        "name": "Intelispark Sales Intelligence Engine",
+        "status": "trained",
+        "training_examples": engine.training_examples,
+        "intent_classes": engine.intent_classes,
+        "external_ai_api": False,
+        "knowledge_source": "Supabase product catalog",
     }
 
 
@@ -49,9 +61,10 @@ def sales_reply(request: SalesRequest):
             .limit(1)
             .execute()
         )
-
         if not business_result.data:
             raise HTTPException(status_code=404, detail="Business not found.")
+
+        business_name = business_result.data[0].get("name", "the shop")
 
         customer_result = (
             supabase.table("customers")
@@ -61,12 +74,8 @@ def sales_reply(request: SalesRequest):
             .limit(1)
             .execute()
         )
-
         if not customer_result.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Customer not found for this business.",
-            )
+            raise HTTPException(status_code=404, detail="Customer not found for this business.")
 
         conversation_result = (
             supabase.table("conversations")
@@ -106,13 +115,14 @@ def sales_reply(request: SalesRequest):
             })
             .execute()
         )
-
         if not saved_customer_message.data:
             raise RuntimeError("Could not save customer message.")
 
-        reply = generate_sales_reply(
-            customer_message=request.customer_message,
-            product_context=request.product_context,
+        products = engine.retrieve_products(request.business_id, request.customer_message)
+        reply = engine.generate_reply(
+            message=request.customer_message,
+            products=products,
+            business_name=business_name,
         )
 
         saved_ai_message = (
@@ -125,7 +135,6 @@ def sales_reply(request: SalesRequest):
             })
             .execute()
         )
-
         if not saved_ai_message.data:
             raise RuntimeError("Could not save Intelispark response.")
 
@@ -137,10 +146,17 @@ def sales_reply(request: SalesRequest):
             .execute()
         )
 
+        intent, confidence = engine.predict_intent(request.customer_message)
         return {
             "success": True,
             "conversation_id": conversation_id,
             "reply": reply,
+            "intelligence": {
+                "intent": intent,
+                "confidence": round(confidence, 3),
+                "products_considered": len(products),
+                "model": "local-tfidf-logistic-regression",
+            },
         }
 
     except HTTPException:
