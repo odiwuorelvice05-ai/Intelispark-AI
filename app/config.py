@@ -6,7 +6,7 @@ load_dotenv()
 
 
 class Settings:
-    app_name: str = os.getenv("APP_NAME", "Forge AI")
+    app_name: str = os.getenv("APP_NAME", "Intelispark AI")
     environment: str = os.getenv("ENVIRONMENT", "development")
 
     supabase_url: str = os.getenv("SUPABASE_URL", "")
