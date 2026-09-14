@@ -11,7 +11,7 @@ from app.supabase_client import supabase
 app = FastAPI(
     title=settings.app_name,
     description="Independent AI sales intelligence platform",
-    version="0.2.0",
+    version="0.3.0",
 )
 
 
@@ -23,11 +23,7 @@ class SalesRequest(BaseModel):
 
 @app.get("/")
 def root():
-    return {
-        "name": settings.app_name,
-        "status": "online",
-        "version": "0.2.0",
-    }
+    return {"name": settings.app_name, "status": "online", "version": "0.3.0"}
 
 
 @app.get("/health")
@@ -35,7 +31,7 @@ def health():
     return {
         "status": "healthy",
         "environment": settings.environment,
-        "intelligence": "trained-local-model",
+        "intelligence": "trained-local-reasoning-engine-v0.3",
     }
 
 
@@ -44,11 +40,38 @@ def ai_status():
     return {
         "name": "Intelispark Sales Intelligence Engine",
         "status": "trained",
+        "brain_version": "0.3",
         "training_examples": engine.training_examples,
         "intent_classes": engine.intent_classes,
+        "capabilities": [
+            "intent_detection",
+            "entity_extraction",
+            "budget_and_condition_constraints",
+            "conversation_context",
+            "evidence_grounded_product_ranking",
+            "sales_signal_detection",
+        ],
         "external_ai_api": False,
         "knowledge_source": "Supabase product catalog",
     }
+
+
+def _conversation_context(conversation_id: str) -> str:
+    result = (
+        supabase.table("messages")
+        .select("sender_type,message_text,created_at")
+        .eq("conversation_id", conversation_id)
+        .order("created_at", desc=True)
+        .limit(8)
+        .execute()
+    )
+    messages = result.data or []
+    messages.reverse()
+    return "\n".join(
+        f"{item.get('sender_type', 'unknown')}: {item.get('message_text', '')}"
+        for item in messages
+        if item.get("message_text")
+    )
 
 
 @app.post("/sales/reply")
@@ -63,7 +86,6 @@ def sales_reply(request: SalesRequest):
         )
         if not business_result.data:
             raise HTTPException(status_code=404, detail="Business not found.")
-
         business_name = business_result.data[0].get("name", "the shop")
 
         customer_result = (
@@ -105,6 +127,8 @@ def sales_reply(request: SalesRequest):
                 raise RuntimeError("Could not create conversation.")
             conversation_id = new_conversation.data[0]["id"]
 
+        context = _conversation_context(conversation_id)
+
         saved_customer_message = (
             supabase.table("messages")
             .insert({
@@ -118,11 +142,14 @@ def sales_reply(request: SalesRequest):
         if not saved_customer_message.data:
             raise RuntimeError("Could not save customer message.")
 
-        products = engine.retrieve_products(request.business_id, request.customer_message)
+        products = engine.retrieve_products(
+            request.business_id, request.customer_message, context
+        )
         reply = engine.generate_reply(
             message=request.customer_message,
             products=products,
             business_name=business_name,
+            context=context,
         )
 
         saved_ai_message = (
@@ -139,23 +166,19 @@ def sales_reply(request: SalesRequest):
             raise RuntimeError("Could not save Intelispark response.")
 
         now = datetime.now(timezone.utc).isoformat()
-        (
-            supabase.table("conversations")
-            .update({"last_message_at": now, "updated_at": now})
-            .eq("id", conversation_id)
-            .execute()
-        )
+        supabase.table("conversations").update(
+            {"last_message_at": now, "updated_at": now}
+        ).eq("id", conversation_id).execute()
 
-        intent, confidence = engine.predict_intent(request.customer_message)
+        analysis = engine.understand(request.customer_message, context)
         return {
             "success": True,
             "conversation_id": conversation_id,
             "reply": reply,
             "intelligence": {
-                "intent": intent,
-                "confidence": round(confidence, 3),
+                **analysis,
                 "products_considered": len(products),
-                "model": "local-tfidf-logistic-regression",
+                "model": "local-tfidf-intent-plus-reasoning-v0.3",
             },
         }
 
