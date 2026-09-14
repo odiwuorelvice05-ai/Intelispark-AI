@@ -1,5 +1,9 @@
 const startButton = document.getElementById("startButton");
+const demoButton = document.getElementById("demoButton");
 
-startButton.addEventListener("click", function () {
-alert("Welcome to Intelispark AI! Let's get started.");
-});
+function launchExperience() {
+  document.getElementById("how-it-works").scrollIntoView({ behavior: "smooth" });
+}
+
+startButton?.addEventListener("click", launchExperience);
+demoButton?.addEventListener("click", launchExperience);
