@@ -125,7 +125,7 @@ class IntelisparkEngine:
             return f"Installments are marked as available for {available[0].get('name')}. {self._card(available[0])}\n\nThe shop can confirm the exact terms before checkout." if available else "I don't see installments marked as available for the matching products. The shop can confirm whether another payment plan exists."
         if e.get("priorities") and intent == "general":
             return f"I can help you choose based on {', '.join(e['priorities'])}. Tell me your budget and preferred brand."
-        if e.get("sales_signal", {}).get("objection") == "price":
+        if a["sales_signal"].get("objection") == "price":
             cheaper = [p for p in products if self._number(p.get("price")) < self._number(top.get("price"))]
             if cheaper: return f"I understand 👍 If the price is the concern, this lower-priced option is available: {self._card(cheaper[0])}"
         if confidence < 0.40:
