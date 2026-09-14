@@ -1,84 +1,23 @@
+"""Compatibility entry point for Intelispark's sales engine.
+
+The real intelligence now lives in app.intelligence and is database-backed.
+"""
+
+from app.intelligence import engine
+
+
 def detect_intent(message: str) -> str:
-    text = message.lower().strip()
-
-    if any(word in text for word in [
-        "hello", "hi", "hey", "habari", "mambo",
-        "good morning", "good afternoon", "good evening"
-    ]):
-        return "greeting"
-
-    if any(word in text for word in [
-        "price", "cost", "how much", "bei", "ngapi",
-        "charges", "expensive", "cheap"
-    ]):
-        return "price"
-
-    if any(word in text for word in [
-        "available", "availability", "stock", "in stock",
-        "ipo", "mna"
-    ]):
-        return "availability"
-
-    if any(word in text for word in [
-        "buy", "purchase", "order", "nunua", "nataka",
-        "take it", "i'll take", "i want it"
-    ]):
-        return "purchase"
-
-    if any(word in text for word in [
-        "appointment", "book", "booking", "schedule",
-        "meeting", "visit"
-    ]):
-        return "appointment"
-
-    if any(word in text for word in [
-        "where", "location", "address", "located", "wapi"
-    ]):
-        return "location"
-
-    if any(word in text for word in [
-        "thank", "thanks", "asante"
-    ]):
-        return "thanks"
-
-    return "general"
+    """Return the intent predicted by Intelispark's trained local model."""
+    return engine.predict_intent(message)[0]
 
 
 def generate_sales_reply(customer_message: str, product_context: str = "") -> str:
-    """Intelispark AI's initial independent sales intelligence layer."""
-    message = customer_message.strip()
-    context = product_context.strip()
+    """Legacy wrapper kept for compatibility with older integrations.
 
-    if not message:
-        return "Hi! 👋 How can I help you today?"
-
-    intent = detect_intent(message)
-
-    if intent == "greeting":
-        return "Hi! 👋 Welcome to Intelispark AI. How can I help you today?"
-
-    if intent == "price":
-        if context:
-            return f"Sure 👍 Here is the information I have:\n\n{context}\n\nWould you like to proceed?"
-        return "Sure 👍 Which product are you asking about? Send me the product name and I'll help you."
-
-    if intent == "availability":
-        if context:
-            return f"Let me help with that 👍\n\n{context}"
-        return "Sure 👍 Which product would you like to check?"
-
-    if intent == "purchase":
-        if context:
-            return f"Great choice 👍\n\n{context}\n\nWould you like to place the order?"
-        return "Great 👍 Tell me the product you'd like to order and I'll help you with the next step."
-
-    if intent == "appointment":
-        return "Absolutely 👍 What day and time would work best for your appointment?"
-
-    if intent == "location":
-        return "Sure 👍 What location information would you like?"
-
-    if intent == "thanks":
-        return "You're welcome! 😊 Let me know if you need anything else."
-
-    return "I'd be happy to help 👍 Could you tell me a little more about what you need?"
+    New production code should call app.intelligence.engine and provide a
+    business_id so product facts can come directly from Supabase.
+    """
+    products = []
+    if product_context.strip():
+        return engine.generate_reply(customer_message, products, "the shop")
+    return engine.generate_reply(customer_message, products, "the shop")
