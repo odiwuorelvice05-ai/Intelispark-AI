@@ -1,62 +1,20 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Intelispark AI — the AI sales employee for modern businesses.">
-  <title>Intelispark AI | AI Sales Employee</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#070a12" />
+  <meta name="description" content="Intelispark AI — independent sales intelligence for modern commerce." />
+  <title>Intelispark AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <header class="site-header">
-    <div class="brand">INTELISPARK<span> AI</span></div>
-    <a class="header-link" href="#product">Product</a>
-  </header>
-
-  <main>
-    <section class="hero" id="product">
-      <div class="eyebrow">AI SALES INTELLIGENCE</div>
-      <h1>Your business deserves<br><span>an AI sales employee.</span></h1>
-      <p class="hero-copy">
-        Intelispark AI understands your products, conversations and sales process —
-        then helps customers move from questions to purchases.
-      </p>
-      <div class="hero-actions">
-        <button id="startButton">Explore Intelispark AI</button>
-        <a href="#how-it-works">See how it works ↓</a>
-      </div>
-    </section>
-
-    <section class="trust-strip" aria-label="Product capabilities">
-      <div><strong>01</strong><span>Product intelligence</span></div>
-      <div><strong>02</strong><span>Sales conversations</span></div>
-      <div><strong>03</strong><span>Business data</span></div>
-      <div><strong>04</strong><span>Built for growth</span></div>
-    </section>
-
-    <section class="how" id="how-it-works">
-      <div class="section-label">THE INTELISPARK ENGINE</div>
-      <h2>From customer question<br>to sales action.</h2>
-      <div class="steps">
-        <article><span>01</span><h3>Understand</h3><p>Interpret what the customer wants.</p></article>
-        <article><span>02</span><h3>Retrieve</h3><p>Use the business's real product and customer data.</p></article>
-        <article><span>03</span><h3>Recommend</h3><p>Match products, availability and sales opportunities.</p></article>
-        <article><span>04</span><h3>Convert</h3><p>Guide the conversation toward a real purchase.</p></article>
-      </div>
-    </section>
-
-    <section class="cta">
-      <p>INTELISPARK AI</p>
-      <h2>The intelligence layer<br>for modern commerce.</h2>
-      <button id="demoButton">Launch the experience</button>
-    </section>
-  </main>
-
-  <footer>
-    <span>© 2026 Intelispark AI</span>
-    <span>AI sales intelligence • Built for Africa, ready for the world.</span>
-  </footer>
-
-  <script src="script.js"></script>
+  <div id="app"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./script.js"></script>
 </body>
 </html>
