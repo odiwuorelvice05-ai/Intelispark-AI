@@ -1,4 +1,5 @@
 /* Intelispark AI — visual refinement layer. Keeps the existing layout/content intact. */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
 :root{--geist:"Geist","Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 body,button,input,textarea,select{font-family:var(--geist)}
 .brand,.hero h1,.landing-section h2,.landing-cta h2,.auth-card h1,.page-head h1,.stat-value,.product-price,.feature h3{font-family:var(--geist)!important}
