@@ -18,9 +18,8 @@
         url: 'https://upywclofrcikfgieuugc.supabase.co',
         key: 'sb_publishable_flIH1s0MGzKZErVnPsSK9Q_PXZfY4Jr'
       };
-      if (!localStorage.getItem('intelispark_supabase')) {
-        localStorage.setItem('intelispark_supabase', JSON.stringify(config));
-      }
+      window.INTELISPARK_CONFIG = config;
+      localStorage.setItem('intelispark_supabase', JSON.stringify(config));
     })();
   </script>
 </head>
