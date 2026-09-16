@@ -12,6 +12,10 @@
     {
       "source": "/script.js",
       "destination": "/frontend/script.js"
+    },
+    {
+      "source": "/onboarding.js",
+      "destination": "/frontend/onboarding.js"
     }
   ]
 }
