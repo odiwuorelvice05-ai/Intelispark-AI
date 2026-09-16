@@ -1,54 +1,58 @@
-/* Intelispark AI — account-first onboarding layer. */
+/* Intelispark AI — account-first onboarding + visual refinement layer. */
 (function(){
-  const originalRenderSettings = window.renderSettings;
-  const originalEnterWorkspace = window.enterWorkspace;
-  const originalLoadBusinessForUser = window.loadBusinessForUser;
+  /* Load the visual layer without touching the existing dashboard architecture. */
+  const visual=document.createElement('link');
+  visual.rel='stylesheet';
+  visual.href='./design-enhancements.css';
+  document.head.appendChild(visual);
+
+  /* Stronger Intelispark mark: recognizable at both landing and workspace sizes. */
+  window.brand=function(){
+    return `<div class="brand"><div class="logo" aria-label="Intelispark AI logo"><span class="logo-mark">✦</span></div><div class="brand-name">Intelispark <span>AI</span></div></div>`;
+  };
 
   function cfg(){
-    try { return JSON.parse(localStorage.getItem('intelispark_supabase') || 'null'); } catch { return null; }
+    try { return window.INTELISPARK_CONFIG || JSON.parse(localStorage.getItem('intelispark_supabase') || 'null'); } catch { return window.INTELISPARK_CONFIG || null; }
   }
 
-  window.initSupabase = function(){
-    const c = cfg();
-    if (!c?.url || !c?.key || !window.supabase) {
-      toast('Intelispark is not connected to its data service yet.');
-      return false;
-    }
-    APP.config = c;
-    APP.supabase = window.supabase.createClient(c.url, c.key);
+  window.initSupabase=function(){
+    const c=cfg();
+    if(!c?.url || !c?.key || !window.supabase){ toast('Intelispark is not connected to its data service yet.'); return false; }
+    APP.config=c;
+    APP.supabase=window.supabase.createClient(c.url,c.key);
     return true;
   };
 
-  window.renderAuth = function(){
-    document.body.innerHTML = `<div class="auth-wrap"><div class="auth-card">${brand()}
-      <h1>${APP.authMode==='login'?'Welcome back':'Create your Intelispark account'}</h1>
-      <p>${APP.authMode==='login'?'Sign in first. Your business workspace opens after authentication.':'Create your account first. We will set up your business workspace next.'}</p>
+  window.renderAuth=function(){
+    document.body.innerHTML=`<div class="auth-wrap"><div class="auth-card">${brand()}
+      <h1>${APP.authMode==='signup'?'Create your Intelispark account':'Welcome back'}</h1>
+      <p>${APP.authMode==='signup'?'Create your account first. We will set up your business workspace next.':'Sign in first. Your business workspace opens after authentication.'}</p>
       <div class="auth-tabs">
-        <button class="${APP.authMode==='login'?'active':''}" onclick="APP.authMode='login';renderAuth()">Sign in</button>
-        <button class="${APP.authMode==='signup'?'active':''}" onclick="APP.authMode='signup';renderAuth()">Create account</button>
+        <button class="${APP.authMode==='signup'?'active':''}" onclick="APP.authMode='signup';renderAuth()">Sign Up</button>
+        <button class="${APP.authMode==='login'?'active':''}" onclick="APP.authMode='login';renderAuth()">Log In</button>
       </div>
       <form id="authForm">
         <div class="field"><label>Email</label><input id="authEmail" type="email" autocomplete="email" required placeholder="you@company.com"></div>
-        <div class="field"><label>Password</label><input id="authPassword" type="password" minlength="6" autocomplete="new-password" required placeholder="••••••••"></div>
-        <button class="primary auth-submit">${APP.authMode==='login'?'Sign in':'Create account'}</button>
+        <div class="field"><label>Password</label><input id="authPassword" type="password" minlength="6" autocomplete="${APP.authMode==='signup'?'new-password':'current-password'}" required placeholder="••••••••"></div>
+        <button class="primary auth-submit">${APP.authMode==='signup'?'Create account':'Log in'}</button>
       </form>
       <button class="back-link" onclick="landing()">← Back to Intelispark AI</button>
       <p style="font-size:11px;margin-top:18px;color:#626d80">Account first. Business setup comes after authentication.</p>
     </div></div>`;
-    $('#authForm').onsubmit = authSubmit;
+    $('#authForm').onsubmit=authSubmit;
   };
 
-  window.authSubmit = async function(e){
+  window.authSubmit=async function(e){
     e.preventDefault();
     if(!initSupabase()) return;
     const email=$('#authEmail').value.trim();
     const password=$('#authPassword').value;
-    const result = APP.authMode==='login'
-      ? await APP.supabase.auth.signInWithPassword({email,password})
-      : await APP.supabase.auth.signUp({email,password});
-    if(result.error){ toast(result.error.message); return; }
-    if(APP.authMode==='signup' && !result.data.session){
-      toast('Account created. Check your email to confirm, then sign in.');
+    const result=APP.authMode==='login'
+      ?await APP.supabase.auth.signInWithPassword({email,password})
+      :await APP.supabase.auth.signUp({email,password});
+    if(result.error){toast(result.error.message);return;}
+    if(APP.authMode==='signup'&&!result.data.session){
+      toast('Account created. Check your email to confirm, then log in.');
       APP.authMode='login';
       renderAuth();
       return;
@@ -57,29 +61,26 @@
     await enterWorkspace();
   };
 
-  window.enterWorkspace = async function(){
-    if(!APP.supabase && !initSupabase()) return;
+  window.enterWorkspace=async function(){
+    if(!APP.supabase&&!initSupabase()) return;
     const {data:{user}}=await APP.supabase.auth.getUser();
     APP.user=user||APP.user;
     if(!APP.user){renderAuth();return;}
     const ok=await loadBusinessForUser();
-    if(!ok) return;
-    if(!APP.business){
-      renderOnboarding();
-      return;
-    }
+    if(!ok)return;
+    if(!APP.business){renderOnboarding();return;}
     await loadData();
     renderDashboard();
   };
 
-  window.loadBusinessForUser = async function(){
+  window.loadBusinessForUser=async function(){
     const {data,error}=await APP.supabase.from('businesses').select('*').eq('owner_id',APP.user.id).limit(1);
     if(error){toast('Could not load your workspace: '+error.message);return false;}
     APP.business=data?.[0]||null;
     return true;
   };
 
-  window.renderOnboarding = function(){
+  window.renderOnboarding=function(){
     document.body.innerHTML=`<div class="auth-wrap"><div class="auth-card" style="max-width:720px">${brand()}
       <div class="section-kicker" style="margin-top:28px">STEP 2 / BUSINESS ONBOARDING</div>
       <h1>Teach Intelispark about your business.</h1>
@@ -114,7 +115,7 @@
       timezone:String(f.get('timezone')||'Africa/Nairobi').trim(),
       description:String(f.get('description')||'').trim()
     };
-    if(!payload.name) return toast('Business name is required.');
+    if(!payload.name)return toast('Business name is required.');
     const {data,error}=await APP.supabase.from('businesses').insert(payload).select().single();
     if(error){toast('Could not create workspace: '+error.message);return;}
     APP.business=data;
@@ -124,7 +125,7 @@
     renderDashboard();
   }
 
-  window.renderSettings = function(p){
+  window.renderSettings=function(p){
     p.innerHTML=head('Settings','Manage your business knowledge and workspace preferences.')+
       `<div class="card form-card"><div class="section-kicker">BUSINESS PROFILE</div>
       <form id="businessForm"><div class="grid form-grid">
@@ -136,12 +137,12 @@
       <div class="field"><label>Timezone</label><input name="timezone" value="${esc(APP.business?.timezone||'Africa/Nairobi')}"></div>
       </div><div class="field"><label>Business description / policies</label><textarea name="description" rows="6" placeholder="Opening hours, delivery policy, warranty, returns, payment methods, sales rules…">${esc(APP.business?.description)}</textarea></div>
       <div class="form-actions"><button class="primary">Save business knowledge</button></div></form></div>
-      <div class="card form-card" style="margin-top:14px"><div class="section-kicker">CONNECTIONS</div><h3 style="font-family:'Space Grotesk';font-size:20px">Workspace connections</h3><p style="font-size:13px;color:var(--muted);line-height:1.8;margin-top:10px">Database connections are managed by Intelispark. Shop owners do not enter Supabase project URLs, keys or service secrets here.</p><div class="pill" style="margin-top:16px">● Secure connection managed by Intelispark</div></div>`;
+      <div class="card form-card" style="margin-top:14px"><div class="section-kicker">CONNECTIONS</div><h3 style="font-family:var(--geist);font-size:20px">Workspace connections</h3><p style="font-size:13px;color:var(--muted);line-height:1.8;margin-top:10px">Database connections are managed by Intelispark. Shop owners do not enter Supabase project URLs, keys or service secrets here.</p><div class="pill" style="margin-top:16px">● Secure connection managed by Intelispark</div></div>`;
     $('#businessForm').onsubmit=saveBusiness;
   };
 
   window.addEventListener('DOMContentLoaded',async()=>{
-    if(!initSupabase()) return;
+    if(!initSupabase())return;
     const {data}=await APP.supabase.auth.getSession();
     if(data.session){APP.user=data.session.user;await enterWorkspace();}
   });
