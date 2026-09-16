@@ -16,6 +16,10 @@
     {
       "source": "/onboarding.js",
       "destination": "/frontend/onboarding.js"
+    },
+    {
+      "source": "/design-enhancements.css",
+      "destination": "/frontend/design-enhancements.css"
     }
   ]
 }
