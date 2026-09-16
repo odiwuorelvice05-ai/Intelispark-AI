@@ -1,26 +1,22 @@
 /* Intelispark AI — account-first onboarding + visual refinement layer. */
 (function(){
-  /* Load the visual layer without touching the existing dashboard architecture. */
-  const visual=document.createElement('link');
-  visual.rel='stylesheet';
-  visual.href='./design-enhancements.css';
-  document.head.appendChild(visual);
+  /* Replace the previous display font without changing the page structure. */
+  document.querySelectorAll('link[href*="Space+Grotesk"]').forEach(el=>el.remove());
+  const font=document.createElement('link');font.rel='stylesheet';font.href='https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap';document.head.appendChild(font);
+  const visual=document.createElement('link');visual.rel='stylesheet';visual.href='./design-enhancements.css';document.head.appendChild(visual);
 
-  /* Stronger Intelispark mark: recognizable at both landing and workspace sizes. */
   window.brand=function(){
     return `<div class="brand"><div class="logo" aria-label="Intelispark AI logo"><span class="logo-mark">✦</span></div><div class="brand-name">Intelispark <span>AI</span></div></div>`;
   };
 
   function cfg(){
-    try { return window.INTELISPARK_CONFIG || JSON.parse(localStorage.getItem('intelispark_supabase') || 'null'); } catch { return window.INTELISPARK_CONFIG || null; }
+    try{return window.INTELISPARK_CONFIG||JSON.parse(localStorage.getItem('intelispark_supabase')||'null');}catch{return window.INTELISPARK_CONFIG||null;}
   }
 
   window.initSupabase=function(){
     const c=cfg();
-    if(!c?.url || !c?.key || !window.supabase){ toast('Intelispark is not connected to its data service yet.'); return false; }
-    APP.config=c;
-    APP.supabase=window.supabase.createClient(c.url,c.key);
-    return true;
+    if(!c?.url||!c?.key||!window.supabase){toast('Intelispark is not connected to its data service yet.');return false;}
+    APP.config=c;APP.supabase=window.supabase.createClient(c.url,c.key);return true;
   };
 
   window.renderAuth=function(){
@@ -43,41 +39,27 @@
   };
 
   window.authSubmit=async function(e){
-    e.preventDefault();
-    if(!initSupabase()) return;
-    const email=$('#authEmail').value.trim();
-    const password=$('#authPassword').value;
-    const result=APP.authMode==='login'
-      ?await APP.supabase.auth.signInWithPassword({email,password})
-      :await APP.supabase.auth.signUp({email,password});
+    e.preventDefault();if(!initSupabase())return;
+    const email=$('#authEmail').value.trim(),password=$('#authPassword').value;
+    const result=APP.authMode==='login'?await APP.supabase.auth.signInWithPassword({email,password}):await APP.supabase.auth.signUp({email,password});
     if(result.error){toast(result.error.message);return;}
-    if(APP.authMode==='signup'&&!result.data.session){
-      toast('Account created. Check your email to confirm, then log in.');
-      APP.authMode='login';
-      renderAuth();
-      return;
-    }
-    APP.user=result.data.user;
-    await enterWorkspace();
+    if(APP.authMode==='signup'&&!result.data.session){toast('Account created. Check your email to confirm, then log in.');APP.authMode='login';renderAuth();return;}
+    APP.user=result.data.user;await enterWorkspace();
   };
 
   window.enterWorkspace=async function(){
-    if(!APP.supabase&&!initSupabase()) return;
-    const {data:{user}}=await APP.supabase.auth.getUser();
-    APP.user=user||APP.user;
+    if(!APP.supabase&&!initSupabase())return;
+    const {data:{user}}=await APP.supabase.auth.getUser();APP.user=user||APP.user;
     if(!APP.user){renderAuth();return;}
-    const ok=await loadBusinessForUser();
-    if(!ok)return;
+    const ok=await loadBusinessForUser();if(!ok)return;
     if(!APP.business){renderOnboarding();return;}
-    await loadData();
-    renderDashboard();
+    await loadData();renderDashboard();
   };
 
   window.loadBusinessForUser=async function(){
     const {data,error}=await APP.supabase.from('businesses').select('*').eq('owner_id',APP.user.id).limit(1);
     if(error){toast('Could not load your workspace: '+error.message);return false;}
-    APP.business=data?.[0]||null;
-    return true;
+    APP.business=data?.[0]||null;return true;
   };
 
   window.renderOnboarding=function(){
@@ -103,26 +85,12 @@
   };
 
   async function createBusiness(e){
-    e.preventDefault();
-    const f=new FormData(e.target);
-    const payload={
-      owner_id:APP.user.id,
-      name:String(f.get('name')||'').trim(),
-      industry:String(f.get('industry')||'').trim(),
-      phone:String(f.get('phone')||'').trim(),
-      whatsapp_number:String(f.get('whatsapp_number')||'').trim(),
-      email:String(f.get('email')||APP.user.email||'').trim(),
-      timezone:String(f.get('timezone')||'Africa/Nairobi').trim(),
-      description:String(f.get('description')||'').trim()
-    };
+    e.preventDefault();const f=new FormData(e.target);
+    const payload={owner_id:APP.user.id,name:String(f.get('name')||'').trim(),industry:String(f.get('industry')||'').trim(),phone:String(f.get('phone')||'').trim(),whatsapp_number:String(f.get('whatsapp_number')||'').trim(),email:String(f.get('email')||APP.user.email||'').trim(),timezone:String(f.get('timezone')||'Africa/Nairobi').trim(),description:String(f.get('description')||'').trim()};
     if(!payload.name)return toast('Business name is required.');
     const {data,error}=await APP.supabase.from('businesses').insert(payload).select().single();
     if(error){toast('Could not create workspace: '+error.message);return;}
-    APP.business=data;
-    APP.products=[];APP.customers=[];APP.conversations=[];
-    toast('Workspace created. Welcome to Intelispark AI.');
-    await loadData();
-    renderDashboard();
+    APP.business=data;APP.products=[];APP.customers=[];APP.conversations=[];toast('Workspace created. Welcome to Intelispark AI.');await loadData();renderDashboard();
   }
 
   window.renderSettings=function(p){
@@ -141,9 +109,5 @@
     $('#businessForm').onsubmit=saveBusiness;
   };
 
-  window.addEventListener('DOMContentLoaded',async()=>{
-    if(!initSupabase())return;
-    const {data}=await APP.supabase.auth.getSession();
-    if(data.session){APP.user=data.session.user;await enterWorkspace();}
-  });
+  window.addEventListener('DOMContentLoaded',async()=>{if(!initSupabase())return;const {data}=await APP.supabase.auth.getSession();if(data.session){APP.user=data.session.user;await enterWorkspace();}});
 })();
