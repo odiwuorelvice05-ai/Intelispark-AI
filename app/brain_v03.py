@@ -82,7 +82,7 @@ class IntelisparkEngine:
         analysis = self.understand(message, context)
         e = analysis["entities"]
         # Older preferences are inherited only for short follow-ups.
-        context_analysis = self.understand("", context) if context.strip() else {"entities": {}}
+        context_analysis = self.understand(context, "") if context.strip() else {"entities": {}}
         context_e = context_analysis.get("entities", {})
         if not e.get("product_type"):
             e["product_type"] = context_e.get("product_type")
