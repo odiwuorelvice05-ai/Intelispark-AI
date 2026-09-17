@@ -23,7 +23,32 @@
 
   function conversationList(){
     if(!APP.conversations.length)return '<div class="empty">No customer conversations yet. Run a message in the intelligence workspace to create one.</div>';
-    return APP.conversations.map(c=>`<button type="button" class="conversation-item ${activeConversationId===c.id?'active':''}" data-conversation-id="${esc(c.id)}"><span class="conversation-icon">◌</span><span><b>Customer conversation</b><small>${esc(c.channel||'whatsapp')} · ${c.last_message_at?formatTime(c.last_message_at):'No messages yet'}</small></span></button>`).join('');
+    return APP.conversations.map(c=>`<button type="button" class="conversation-item ${activeConversationId===c.id?'active':''}" data-conversation-id="${esc(c.id)}"><span class="conversation-icon">◌</span><span><b>Customer conversation</b><small>${esc(c.channel||'whatsapp')} · ${c.last_message_at?formatTime(c.last_message_at):'No messages yet'}</small></span><span class="conversation-delete-btn" role="button" tabindex="0" data-conversation-delete="${esc(c.id)}" aria-label="Delete conversation">Delete</span></button>`).join('');
+  }
+
+  async function deleteConversation(id){
+    if(!APP?.supabase||!APP?.business?.id||!id)return;
+    const conversation=APP.conversations.find(c=>c.id===id);
+    const label=conversation?.channel||'customer';
+    if(!confirm(`Delete this ${label} conversation?\n\nThis permanently removes the conversation and its stored messages from this shop. This cannot be undone.`))return;
+
+    const deleteButton=document.querySelector(`[data-conversation-delete="${CSS.escape(id)}"]`);
+    if(deleteButton){deleteButton.textContent='Deleting…';deleteButton.style.pointerEvents='none';}
+    try{
+      const session=await APP.supabase.auth.getSession();
+      if(!session.data?.session)throw new Error('Your session has expired. Please sign in again.');
+      const result=await APP.supabase.from('conversations').delete().eq('id',id).eq('business_id',APP.business.id).select('id').maybeSingle();
+      if(result.error)throw result.error;
+      activeConversationId=null;
+      activeMessages=[];
+      await loadData();
+      renderTab();
+      toast('Conversation deleted successfully.');
+    }catch(error){
+      console.error('[Intelispark conversation delete]',error);
+      if(deleteButton){deleteButton.textContent='Delete';deleteButton.style.pointerEvents='';}
+      toast(error?.message||'Could not delete the conversation.');
+    }
   }
 
   async function selectConversation(id){
@@ -42,7 +67,10 @@
     await loadData();
     const list=$('#conversationList');
     if(list)list.innerHTML=conversationList();
-    document.querySelectorAll('.conversation-item').forEach(item=>item.addEventListener('click',()=>selectConversation(item.dataset.conversationId)));
+    document.querySelectorAll('.conversation-item').forEach(item=>item.addEventListener('click',event=>{
+      if(event.target.closest('[data-conversation-delete]'))return;
+      selectConversation(item.dataset.conversationId);
+    }));
     if(activeConversationId)await selectConversation(activeConversationId);
   }
 
@@ -97,7 +125,19 @@
     try{
       await loadData();
       const list=$('#conversationList');if(list)list.innerHTML=conversationList();
-      document.querySelectorAll('.conversation-item').forEach(item=>item.addEventListener('click',()=>selectConversation(item.dataset.conversationId)));
+      document.querySelectorAll('.conversation-item').forEach(item=>item.addEventListener('click',event=>{
+        if(event.target.closest('[data-conversation-delete]'))return;
+        selectConversation(item.dataset.conversationId);
+      }));
+      const listArea=$('#conversationList');
+      listArea?.addEventListener('click',event=>{
+        const deleteTarget=event.target.closest('[data-conversation-delete]');
+        if(deleteTarget){event.preventDefault();event.stopPropagation();deleteConversation(deleteTarget.dataset.conversationDelete);}
+      });
+      listArea?.addEventListener('keydown',event=>{
+        const deleteTarget=event.target.closest('[data-conversation-delete]');
+        if(deleteTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();deleteConversation(deleteTarget.dataset.conversationDelete);}
+      });
       const candidate=activeConversationId||APP.conversations[0]?.id;
       if(candidate)await selectConversation(candidate);
     }catch(error){const list=$('#conversationList');if(list)list.innerHTML=`<div class="ai-error">${esc(error.message||'Could not load conversations.')}</div>`;}
