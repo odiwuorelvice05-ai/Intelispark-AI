@@ -137,9 +137,12 @@ class IntelisparkEngine:
         a = self.understand(message, context)
         intent, confidence, e = a["intent"], a["confidence"], a["entities"]
         top = products[0] if products else None
-        if intent == "greeting":
+        if intent == "greeting" and not e.get("product_type") and not any(x in message.lower() for x in ("power adapter", "adapter", "charger", "cable", "earphones", "earbuds", "headphones", "power bank", "case", "cover", "laptop", "camera", "tablet", "ipad", "macbook", "phone", "smartphone", "mobile")):
             return f"Hi! 👋 Welcome to {business_name}. What phone or device are you looking for?"
         if not products:
+            requested = e.get("product_type")
+            if requested:
+                return f"I couldn't find a {requested} matching that request in the shop's current catalog. I don't want to invent stock that isn't there. If you'd like, give me a different model, brand or budget and I'll check again."
             return "I couldn't find a matching product in the shop catalog. Give me the model, brand or budget and I'll check again."
         if intent == "price":
             return f"{self._card(top)}\n\nWould you like me to find another option?"
