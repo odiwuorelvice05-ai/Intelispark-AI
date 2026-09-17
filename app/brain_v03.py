@@ -15,6 +15,13 @@ from app.training_data import TRAINING_EXAMPLES
 
 class IntelisparkEngine:
     BRANDS = ("samsung", "iphone", "apple", "xiaomi", "redmi", "tecno", "itel", "infinix", "nokia", "oppo", "vivo", "honor", "google", "oneplus")
+    PRODUCT_TYPES = {
+        "phone": ("phone", "smartphone", "mobile", "handset", "iphone", "galaxy", "redmi", "tecno", "itel", "infinix", "nokia", "oppo", "vivo", "honor", "oneplus"),
+        "laptop": ("laptop", "notebook", "macbook", "thinkpad", "ideapad", "pavilion", "latitude", "elitebook"),
+        "tablet": ("tablet", "ipad"),
+        "camera": ("camera", "dslr", "mirrorless", "canon", "nikon", "sony alpha"),
+        "accessory": ("charger", "cable", "earphones", "earbuds", "headphones", "power bank", "case", "cover"),
+    }
     PRIORITIES = {
         "camera": ("camera", "photo", "selfie"),
         "battery": ("battery", "power", "lasting"),
@@ -34,21 +41,28 @@ class IntelisparkEngine:
         self.training_examples = len(texts)
         self.intent_classes = sorted(set(labels))
 
-    def predict_intent(self, message: str) -> tuple[str, float]:
+    def predict_intent(self, message: str, context: str = "") -> tuple[str, float]:
+        normalized = message.strip().lower()
+        if normalized in {"yes", "yeah", "yep", "sure", "okay", "ok"} and "pickup or delivery" in context.lower():
+            return "delivery", 1.0
         probabilities = self.model.predict_proba([message])[0]
         i = probabilities.argmax()
         return self.model.classes_[i], float(probabilities[i])
 
     def understand(self, message: str, context: str = "") -> dict[str, Any]:
-        intent, confidence = self.predict_intent(message)
+        intent, confidence = self.predict_intent(message, context)
+        current = message.lower()
         text = f"{context} {message}".lower()
+        explicit_types = [k for k, words in self.PRODUCT_TYPES.items() if any(re.search(rf"\b{re.escape(w)}\b", current) for w in words)]
+        product_type = explicit_types[0] if explicit_types else None
         return {
             "intent": intent,
             "confidence": round(confidence, 3),
             "entities": {
                 "brands": [b for b in self.BRANDS if re.search(rf"\b{re.escape(b)}\b", text)],
-                "product_mentions": self._product_mentions(text),
-                "budget_max": self._budget(text),
+                "product_mentions": self._product_mentions(current),
+                "product_type": product_type,
+                "budget_max": self._budget(current),
                 "condition": self._condition(text),
                 "priorities": [k for k, words in self.PRIORITIES.items() if any(w in text for w in words)],
             },
@@ -67,7 +81,18 @@ class IntelisparkEngine:
             return []
         analysis = self.understand(message, context)
         e = analysis["entities"]
-        terms = set(self._tokens(f"{context} {message}"))
+        # Older preferences are inherited only for short follow-ups.
+        context_analysis = self.understand("", context) if context.strip() else {"entities": {}}
+        context_e = context_analysis.get("entities", {})
+        if not e.get("product_type"):
+            e["product_type"] = context_e.get("product_type")
+        if e.get("budget_max") is None and self._is_short_followup(message):
+            e["budget_max"] = context_e.get("budget_max")
+        if not e.get("condition") and self._is_short_followup(message):
+            e["condition"] = context_e.get("condition")
+        if not e.get("priorities") and self._is_short_followup(message):
+            e["priorities"] = context_e.get("priorities", [])
+        terms = set(self._tokens(message))
         ranked = []
         for p in products:
             text = " ".join(str(p.get(k) or "") for k in ("name", "brand", "category", "variant", "condition", "description", "specs")).lower()
@@ -78,7 +103,10 @@ class IntelisparkEngine:
             for b in e["brands"]:
                 score += 6 if b in brand or b in name else -3
             if e["budget_max"] is not None:
-                score += 7 if price <= e["budget_max"] else -min(7, (price-e["budget_max"])/max(e["budget_max"], 1)*7)
+                score += 7 if price <= e["budget_max"] else -12
+            if e.get("product_type"):
+                type_words = self.PRODUCT_TYPES[e["product_type"]]
+                score += 12 if any(re.search(rf"\b{re.escape(w)}\b", text) for w in type_words) else -15
             if e["condition"]:
                 score += 5 if e["condition"] in str(p.get("condition") or "").lower() else -4
             for priority in e["priorities"]:
@@ -90,8 +118,20 @@ class IntelisparkEngine:
                 score += SequenceMatcher(None, mention, name).ratio() * 3
             ranked.append((score, p))
         ranked.sort(key=lambda x: x[0], reverse=True)
-        positive = [p for score, p in ranked if score > 0]
-        return positive[:5] if positive else products[:5]
+        filtered = ranked
+        if e.get("product_type"):
+            words = self.PRODUCT_TYPES[e["product_type"]]
+            typed = [(score, p) for score, p in ranked if any(re.search(rf"\b{re.escape(w)}\b", " ".join(str(p.get(k) or "") for k in ("name","brand","category","variant","description","specs")).lower()) for w in words)]
+            if typed:
+                filtered = typed
+        if e.get("budget_max") is not None:
+            within_budget = [(score, p) for score, p in filtered if self._number(p.get("price")) <= e["budget_max"]]
+            if within_budget:
+                filtered = within_budget
+            else:
+                return []
+        positive = [p for score, p in filtered if score > 0]
+        return [p for score, p in filtered[:5]] if not positive else positive[:5]
 
     def generate_reply(self, message: str, products: list[dict[str, Any]], business_name: str = "the shop", context: str = "") -> str:
         a = self.understand(message, context)
@@ -105,6 +145,8 @@ class IntelisparkEngine:
             return f"{self._card(top)}\n\nWould you like me to find another option?"
         if intent == "availability":
             return f"{top.get('name', 'That product')} is {'in stock' if int(top.get('stock_quantity') or 0) > 0 else 'currently out of stock'}. {self._card(top)}"
+        if intent == "delivery":
+            return "Absolutely 👍 Would you prefer pickup from the shop or delivery? If you choose delivery, tell me your location and the shop can confirm the available option and fee."
         if intent == "purchase":
             if int(top.get("stock_quantity") or 0) <= 0:
                 alternatives = [p for p in products[1:] if int(p.get("stock_quantity") or 0) > 0]
@@ -131,6 +173,10 @@ class IntelisparkEngine:
         if confidence < 0.40:
             return "I want to make sure I understand you correctly. Are you looking for a price, availability, recommendation, comparison or purchase?"
         return f"I found {top.get('name')} in the shop catalog. {self._card(top)}\n\nHow would you like to proceed?"
+
+    @staticmethod
+    def _is_short_followup(text: str) -> bool:
+        return len(re.sub(r"[^a-z0-9]+", " ", text.lower()).split()) <= 5
 
     @staticmethod
     def _tokens(text: str) -> list[str]:
