@@ -12,13 +12,6 @@
     const e = data.intelligence?.entities || {}, s = data.intelligence?.sales_signal || {};
     $('#aiInspector').innerHTML = `<div class="ai-fact"><span>Intent</span><b>${esc(data.intelligence?.intent || '—')}</b></div><div class="ai-fact"><span>Confidence</span><b>${Math.round(Number(data.intelligence?.confidence || 0)*100)}%</b></div><div class="ai-fact"><span>Brands</span><b>${esc((e.brands||[]).join(', ')||'None detected')}</b></div><div class="ai-fact"><span>Budget</span><b>${e.budget_max != null ? money(e.budget_max) : 'None detected'}</b></div><div class="ai-fact"><span>Condition</span><b>${esc(e.condition||'Any')}</b></div><div class="ai-fact"><span>Priorities</span><b>${esc((e.priorities||[]).join(', ')||'None detected')}</b></div><div class="ai-fact"><span>Purchase intent</span><b>${s.purchase_intent?'Detected':'Not detected'}</b></div><div class="ai-fact"><span>Catalog matches</span><b>${Number(data.intelligence?.products_considered||0)}</b></div>`;
   }
-  async function getTestCustomer() {
-    const existing = APP.customers.find(x => x.name === 'Intelispark Test Customer') || APP.customers[0];
-    if (existing) return existing;
-    const {data,error} = await APP.supabase.from('customers').insert({business_id:APP.business.id,name:'Intelispark Test Customer',phone:`+254700${String(Date.now()).slice(-6)}`}).select().single();
-    if (error) throw error;
-    APP.customers.unshift(data); return data;
-  }
   async function runIntelligence(ev) {
     ev.preventDefault(); const button=$('#aiSend'), message=$('#aiMessage')?.value.trim();
     if(!message||!APP.business||!APP.user)return;
@@ -26,8 +19,7 @@
     try {
       const session=await APP.supabase.auth.getSession(), token=session.data?.session?.access_token;
       if(!token)throw new Error('Your session has expired. Please sign in again.');
-      const customer=await getTestCustomer();
-      const response=await fetch(`${BACKEND}/sales/reply`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({business_id:APP.business.id,customer_id:customer.id,customer_message:message})});
+      const response=await fetch(`${BACKEND}/sales/reply`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({business_id:APP.business.id,customer_message:message})});
       const payload=await response.json().catch(()=>({})); if(!response.ok)throw new Error(payload.detail||`Intelligence request failed (${response.status}).`);
       $('#aiReply').innerHTML=`<div class="ai-reply-label">INTELISPARK RESPONSE</div><div class="ai-reply-text">${esc(payload.reply||'')}</div>`; showInspector(payload); await loadData();
     } catch(error) { $('#aiReply').innerHTML=`<div class="ai-error">${esc(error.message||'Could not run intelligence.')}</div>`; }
