@@ -74,6 +74,18 @@
     }
   }
 
+  function conversationList(){
+    if(!APP?.conversations?.length)return '<div class="empty">No customer conversations yet.</div>';
+    return APP.conversations.map((conversation)=>{
+      const id=String(conversation.id||'');
+      const title=conversation.title||conversation.customer_name||'Customer conversation';
+      const channel=conversation.channel||'whatsapp';
+      const created=String(conversation.created_at||'').slice(0,16).replace('T',' ');
+      return '<div class="conversation-item '+(id===activeConversationId?'active':'')+'" data-conversation-id="'+esc(id)+'" role="button" tabindex="0">'+
+        '<div class="conversation-item-main"><b>'+esc(title)+'</b><p>'+esc(channel)+' • '+esc(created)+'</p></div>'+
+        '<button class="text-btn conversation-delete" type="button" data-conversation-delete="'+esc(id)+'" aria-label="Delete conversation">Delete</button></div>';
+    }).join('');
+  }
   async function refreshConversationList(){
     await loadData();
     const list=$('#conversationList');
