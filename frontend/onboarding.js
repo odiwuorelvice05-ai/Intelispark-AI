@@ -129,15 +129,16 @@
       const f=new FormData(e.currentTarget);
       const payload={owner_id:APP.user.id,name:String(f.get('name')||'').trim(),industry:String(f.get('industry')||'').trim(),phone:String(f.get('phone')||'').trim(),whatsapp_number:String(f.get('whatsapp_number')||'').trim(),email:String(f.get('email')||APP.user.email||'').trim(),timezone:String(f.get('timezone')||'').trim()||'Africa/Nairobi',description:String(f.get('description')||'').trim()};
       if(!payload.name)return toast('Business name is required.');
-      if(button){button.disabled=true;button.textContent='Creating workspace…';}
+      if(button){button.disabled=true;button.textContent='Saving business…';}
       const {data,error}=await APP.supabase.from('businesses').insert(payload).select().single();
       if(error)throw error;
+      if(!data?.id)throw new Error('Business was not confirmed as saved.');
       APP.business=data;APP.products=[];APP.customers=[];APP.conversations=[];
-      toast('Workspace created. Welcome to Intelispark AI.');
+      toast('Saved Successfully.');
       await loadData();renderDashboard();
     }catch(error){
       console.error('[Intelispark workspace creation]',error);
-      toast(error?.message||'Could not create workspace.');
+      toast(error?.message||'Could not save business.');
       if(button){button.disabled=false;button.textContent='Create my workspace →';}
     }
   }
