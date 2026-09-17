@@ -1,0 +1,36 @@
+/* Intelispark AI — customer conversation UI */
+.chat-shell{overflow:hidden;padding:0;display:flex;flex-direction:column;min-height:620px}
+.chat-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:24px 26px;border-bottom:1px solid var(--border,#202737)}
+.chat-header h3,.conversation-detail-head h3{margin:5px 0 0}
+.chat-header p{margin:6px 0 0}
+.conversation-messages{flex:1;min-height:390px;max-height:58vh;overflow:auto;padding:28px clamp(16px,4vw,52px);scroll-behavior:smooth}
+.chat-row{display:flex;gap:11px;margin:0 auto 22px;max-width:850px;align-items:flex-start}
+.chat-row.customer{justify-content:flex-end}
+.chat-row.customer .chat-avatar{order:2}
+.chat-row.customer .chat-bubble{order:1;background:rgba(50,230,208,.09);border-color:rgba(50,230,208,.18)}
+.chat-avatar{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;flex:0 0 30px;font-size:10px;font-weight:700;background:#111827;border:1px solid var(--border,#202737);color:#aeb8ca}
+.chat-row.assistant .chat-avatar{background:linear-gradient(135deg,#182846,#0d1628);color:#32e6d0}
+.chat-bubble{max-width:min(76%,680px);padding:13px 15px;border:1px solid var(--border,#202737);border-radius:16px;background:rgba(255,255,255,.025);box-shadow:0 8px 28px rgba(0,0,0,.12)}
+.chat-text{white-space:pre-wrap;line-height:1.65;font-size:14px;color:#e8edf6}
+.chat-time{display:block;margin-top:7px;font-size:10px;color:#667186}
+.chat-composer{display:flex;gap:10px;align-items:flex-end;padding:16px 20px;border-top:1px solid var(--border,#202737);background:rgba(7,10,18,.72)}
+.chat-composer textarea{flex:1;resize:none;min-height:48px;max-height:130px;border:1px solid var(--border,#202737);border-radius:14px;background:#0d1320;color:#eef2f8;padding:14px 15px;outline:none;font:inherit;line-height:1.45}
+.chat-composer textarea:focus{border-color:rgba(50,230,208,.42);box-shadow:0 0 0 3px rgba(50,230,208,.07)}
+.chat-composer button{min-height:48px;min-width:82px}
+.chat-footer{display:flex;justify-content:space-between;gap:12px;padding:10px 20px 14px;color:#626d80;font-size:10px}
+.chat-loading{padding:30px;text-align:center;color:#7d889c;font-size:13px}
+.chat-empty{text-align:center;margin:70px auto;max-width:430px}
+.conversation-layout{display:grid;grid-template-columns:290px minmax(0,1fr);gap:14px;align-items:stretch}
+.conversation-sidebar{padding:18px;min-height:620px}
+.conversation-list{margin-top:15px;display:flex;flex-direction:column;gap:7px}
+.conversation-item{width:100%;display:flex;gap:10px;text-align:left;padding:12px;border:1px solid transparent;border-radius:12px;background:transparent;color:#dfe5ef;cursor:pointer}
+.conversation-item:hover{background:rgba(255,255,255,.03)}
+.conversation-item.active{background:rgba(50,230,208,.07);border-color:rgba(50,230,208,.17)}
+.conversation-item b{display:block;font-size:12px;margin-bottom:4px}
+.conversation-item small{display:block;color:#68748a;font-size:10px;text-transform:capitalize}
+.conversation-icon{font-size:18px;color:#32e6d0;line-height:1}
+.conversation-detail{min-width:0;overflow:hidden;padding:0;min-height:620px;display:flex;flex-direction:column}
+.conversation-detail-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:21px 24px;border-bottom:1px solid var(--border,#202737)}
+.conversation-detail .conversation-messages{max-height:none}
+@media(max-width:850px){.conversation-layout{grid-template-columns:1fr}.conversation-sidebar{min-height:auto}.conversation-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}.conversation-detail{min-height:520px}.chat-shell{min-height:560px}.conversation-messages{max-height:52vh}.chat-bubble{max-width:84%}}
+@media(max-width:560px){.chat-header{align-items:flex-start;flex-direction:column;padding:18px}.chat-composer{padding:12px;gap:7px}.chat-composer button{min-width:68px}.chat-footer{display:none}.chat-row{gap:7px}.chat-avatar{width:26px;height:26px;flex-basis:26px}.chat-bubble{max-width:88%}.conversation-detail-head{padding:17px}.conversation-messages{padding:20px 12px}}
