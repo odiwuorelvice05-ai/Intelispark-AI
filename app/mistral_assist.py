@@ -69,7 +69,7 @@ class MistralAssist:
                 "description": p.get("description"),
                 "specs": p.get("specs"),
             }
-            for p in products[:12]
+            for p in products[:200]
         ]
         profile = {
             "name": business.get("name"),
