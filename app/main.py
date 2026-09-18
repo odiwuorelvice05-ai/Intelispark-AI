@@ -99,23 +99,72 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
         # the catalog authority and is never required for ordinary requests.
         ai_guidance = None
         if mistral_assist.should_call(local_analysis, request.customer_message):
+            # Mistral gets the full catalog for semantic understanding, while
+            # Supabase remains the authoritative source of every product fact.
+            catalog_result = (
+                supabase.table("products")
+                .select("id,name,brand,category,variant,condition,price,stock_quantity,description,specs,installment_available")
+                .eq("business_id", request.business_id)
+                .limit(200)
+                .execute()
+            )
+            catalog_for_ai = catalog_result.data or []
             ai_guidance = mistral_assist.understand(
                 request.customer_message,
                 context,
                 business_knowledge,
-                products,
+                catalog_for_ai,
             )
 
         search_message = request.customer_message
+        analysis_for_reply = local_analysis
         if ai_guidance and ai_guidance.get("catalog_query"):
             search_message = str(ai_guidance["catalog_query"])
 
-        if ai_guidance and search_message != request.customer_message:
-            products = engine.retrieve_products(
-                request.business_id,
-                search_message,
-                context,
-            )
+        if ai_guidance:
+            # Feed only structured interpretation back into Intelispark's local
+            # response engine. The model can clarify meaning, but it cannot
+            # become the source of truth.
+            guided_intent = str(ai_guidance.get("intent") or "").strip()
+            valid_intents = set(engine.intent_classes) | {
+                "identity", "owner_contact", "general", "thanks"
+            }
+            if guided_intent in valid_intents:
+                analysis_for_reply = dict(local_analysis)
+                analysis_for_reply["intent"] = guided_intent
+                analysis_for_reply["confidence"] = max(
+                    float(local_analysis.get("confidence") or 0),
+                    float(ai_guidance.get("confidence") or 0),
+                )
+                guided_entities = dict(local_analysis.get("entities") or {})
+                product_type = ai_guidance.get("product_type")
+                brand = str(ai_guidance.get("brand") or "").strip().lower()
+                budget = ai_guidance.get("budget_max")
+                if product_type in {"phone", "laptop", "tablet", "camera", "audio", "accessory"}:
+                    guided_entities["product_type"] = product_type
+                if brand:
+                    guided_entities["brands"] = [brand]
+                if budget is not None:
+                    guided_entities["budget_max"] = budget
+                analysis_for_reply["entities"] = guided_entities
+
+            if search_message != request.customer_message:
+                products = engine.retrieve_products(
+                    request.business_id,
+                    search_message,
+                    context,
+                )
+
+            excluded = {
+                str(name).strip().lower()
+                for name in (ai_guidance.get("exclude_names") or [])
+                if str(name).strip()
+            }
+            if excluded:
+                products = [
+                    p for p in products
+                    if str(p.get("name") or "").strip().lower() not in excluded
+                ]
 
         reply = engine.generate_reply(
             message=request.customer_message,
@@ -123,6 +172,7 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
             business_name=business_name,
             context=context,
             business=business_knowledge,
+            analysis_override=analysis_for_reply,
         )
 
         # Safe direct responses are allowed only for identity/owner-contact
