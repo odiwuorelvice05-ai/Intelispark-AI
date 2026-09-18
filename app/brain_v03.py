@@ -156,7 +156,7 @@ class IntelisparkEngine:
                 if relevant:
                     return "Here is the shop information from its business profile: " + " ".join(relevant[:3])
             if business.get("phone") or business.get("whatsapp_number"):
-                return f"I don't have the full shop address in the profile yet. You can contact the shop at {business.get("phone") or business.get("whatsapp_number")} to confirm the exact location."
+                return f"I don't have the full shop address in the profile yet. You can contact the shop at {business.get('phone') or business.get('whatsapp_number')} to confirm the exact location."
             return "I don't have a full shop address in the business profile yet, so I don't want to invent one. The owner can add it to Business knowledge in Settings."
         if intent == "delivery":
             if description:
