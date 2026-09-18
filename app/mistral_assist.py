@@ -1,8 +1,8 @@
 """Optional Mistral language layer for Intelispark.
 
-Mistral is deliberately a supplement, not the source of truth. It is only
-called for ambiguous/low-confidence messages and returns structured guidance.
-Supabase and Intelispark's local retrieval engine remain authoritative.
+Mistral is the primary language-understanding layer, not the source of truth.
+It interprets customer language and conversation; Intelispark performs grounded
+retrieval and response generation from Supabase.
 """
 from __future__ import annotations
 
@@ -31,21 +31,17 @@ class MistralAssist:
         entities = analysis.get("entities") or {}
         text = message.strip()
 
-        # Preserve tokens: straightforward, high-confidence catalog questions
-        # stay entirely inside Intelispark's local engine.
-        if confidence >= 0.82 and intent in {
-            "price", "availability", "purchase", "installment",
-            "location", "delivery", "business_info", "greeting",
-        } and (
-            entities.get("product_type")
-            or entities.get("product_mentions")
-            or intent in {"location", "delivery", "business_info", "greeting"}
-        ):
+        # Mistral is the main conversational interpreter. Keep obvious
+        # greetings and exact high-confidence factual lookups local to control
+        # token use.
+        if confidence >= 0.88 and intent in {
+            "greeting", "location", "delivery", "business_info"
+        }:
             return False
 
-        # The model earns its tokens when language is ambiguous, contextual,
-        # conversational, or the local classifier is uncertain.
-        return confidence < 0.72 or len(text.split()) <= 5 or intent in {"general", "thanks"}
+        # Catalog and conversational requests benefit from semantic understanding,
+        # especially short follow-ups such as "what else?".
+        return True
 
     def understand(
         self,
@@ -110,7 +106,7 @@ customer means. Do not fabricate missing facts. For 'what else' or 'another one'
             "customer_message": message,
             "conversation": context[-6000:],
             "business_profile": profile,
-            "currently_retrieved_products": catalog,
+            "catalog": catalog,
         }
 
         try:
