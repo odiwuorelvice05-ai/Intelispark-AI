@@ -16,6 +16,7 @@ from app.training_data import TRAINING_EXAMPLES
 class IntelisparkEngine:
     BRANDS = ("samsung", "iphone", "apple", "xiaomi", "redmi", "tecno", "itel", "infinix", "nokia", "oppo", "vivo", "honor", "google", "oneplus")
     PRODUCT_TYPES = {
+        "audio": ("woofer", "woofers", "speaker", "speakers", "sound system", "home theater", "home theatre", "subwoofer", "sub woofer", "subwoofer"),
         "phone": ("phone", "smartphone", "mobile", "handset", "iphone", "galaxy", "redmi", "tecno", "itel", "infinix", "nokia", "oppo", "vivo", "honor", "oneplus"),
         "laptop": ("laptop", "notebook", "macbook", "thinkpad", "ideapad", "pavilion", "latitude", "elitebook"),
         "tablet": ("tablet", "ipad"),
@@ -43,6 +44,8 @@ class IntelisparkEngine:
 
     def predict_intent(self, message: str, context: str = "") -> tuple[str, float]:
         normalized = message.strip().lower()
+        if "pickup or delivery" in context.lower() and any(x in normalized for x in ("pickup", "pick up", "collect", "delivery")):
+            return "delivery", 1.0
         if normalized in {"yes", "yeah", "yep", "sure", "okay", "ok"} and "pickup or delivery" in context.lower():
             return "delivery", 1.0
         probabilities = self.model.predict_proba([message])[0]
@@ -59,7 +62,7 @@ class IntelisparkEngine:
             "intent": intent,
             "confidence": round(confidence, 3),
             "entities": {
-                "brands": [b for b in self.BRANDS if re.search(rf"\b{re.escape(b)}\b", text)],
+                "brands": [b for b in self.BRANDS if re.search(rf"\b{re.escape(b)}\b", current) and not re.search(rf"\b(?:not|no|without)\s+(?:the\s+)?{re.escape(b)}\b", current)],
                 "product_mentions": self._product_mentions(current),
                 "product_type": product_type,
                 "budget_max": self._budget(current),
@@ -84,8 +87,10 @@ class IntelisparkEngine:
         # Older preferences are inherited only for short follow-ups.
         context_analysis = self.understand(context, "") if context.strip() else {"entities": {}}
         context_e = context_analysis.get("entities", {})
-        if not e.get("product_type"):
+        if not e.get("product_type") and self._is_short_followup(message):
             e["product_type"] = context_e.get("product_type")
+        if not e.get("brands") and self._is_short_followup(message):
+            e["brands"] = context_e.get("brands", [])
         if e.get("budget_max") is None and self._is_short_followup(message):
             e["budget_max"] = context_e.get("budget_max")
         if not e.get("condition") and self._is_short_followup(message):
@@ -137,7 +142,7 @@ class IntelisparkEngine:
         a = self.understand(message, context)
         intent, confidence, e = a["intent"], a["confidence"], a["entities"]
         top = products[0] if products else None
-        if intent == "greeting" and not e.get("product_type") and not any(x in message.lower() for x in ("power adapter", "adapter", "charger", "cable", "earphones", "earbuds", "headphones", "power bank", "case", "cover", "laptop", "camera", "tablet", "ipad", "macbook", "phone", "smartphone", "mobile")):
+        if intent == "greeting" and not e.get("product_type") and not any(x in message.lower() for x in ("power adapter", "adapter", "charger", "cable", "earphones", "earbuds", "headphones", "power bank", "case", "cover", "woofer", "speaker", "subwoofer", "sound system", "home theater", "home theatre", "laptop", "camera", "tablet", "ipad", "macbook", "phone", "smartphone", "mobile")):
             return f"Hi! 👋 Welcome to {business_name}. What phone or device are you looking for?"
         if not products:
             requested = e.get("product_type")
