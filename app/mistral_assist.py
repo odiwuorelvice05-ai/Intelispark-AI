@@ -99,12 +99,13 @@ Return ONLY JSON with:
   "brand": "brand or empty string",
   "needs_catalog": true|false,
   "direct_reply": "only for identity/owner_contact/general questions that can be answered safely from supplied data, otherwise empty",
-  "confidence": number
+  "confidence": number,
+  "exclude_names": ["exact product names to exclude for alternatives/what-else requests"]
 }
 
 For 'what else', 'another one', 'anything cheaper', 'that's expensive', and
 similar follow-ups, use the conversation to infer what product/category the
-customer means. Do not fabricate missing facts."""
+customer means. Do not fabricate missing facts. For 'what else' or 'another one', identify products already shown in the conversation and put their exact names in exclude_names. For 'anything cheaper' or a price objection, identify the referenced product and exclude it from alternatives."""
         user = {
             "customer_message": message,
             "conversation": context[-6000:],
