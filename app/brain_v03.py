@@ -21,7 +21,7 @@ class IntelisparkEngine:
         "laptop": ("laptop", "notebook", "macbook", "thinkpad", "ideapad", "pavilion", "latitude", "elitebook"),
         "tablet": ("tablet", "ipad"),
         "camera": ("camera", "dslr", "mirrorless", "canon", "nikon", "sony alpha"),
-        "accessory": ("charger", "cable", "earphones", "earbuds", "headphones", "power bank", "case", "cover"),
+        "accessory": ("charger", "cable", "earphones", "earbuds", "headphones", "power bank", "case", "cover", "mouse", "keyboard", "adapter"),
     }
     PRIORITIES = {
         "camera": ("camera", "photo", "selfie"),
@@ -160,6 +160,9 @@ class IntelisparkEngine:
             "what is in stock",
             "what's in stock",
             "what do you have",
+            "what do you have for sale",
+            "what is for sale",
+            "what is available for sale",
             "what products do you have",
             "what products are available",
             "what is available",
@@ -169,6 +172,13 @@ class IntelisparkEngine:
             if available:
                 return "Here's what is currently in stock:\n\n" + "\n\n".join(self._card(p) for p in available[:5])
             return "I don't see any products currently marked as in stock in the shop catalog."
+
+        # Identity is conversational and does not require a product lookup.
+        if intent == "identity" or any(
+            phrase in normalized_message
+            for phrase in ("which model am i talking to", "what model am i talking to", "who am i talking to", "who are you")
+        ):
+            return "You're talking to Intelispark AI, the sales intelligence assistant for this shop."
 
         if intent == "business_info":
             if description:
