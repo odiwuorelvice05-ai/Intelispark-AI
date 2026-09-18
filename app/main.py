@@ -115,6 +115,15 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
 
         search_message = request.customer_message
         analysis_for_reply = local_analysis
+        # Always initialize products before any Mistral branch. If Mistral is
+        # unavailable or not needed, Intelispark falls back to its local
+        # authoritative retrieval instead of leaving products undefined.
+        products = engine.retrieve_products(
+            request.business_id,
+            search_message,
+            context,
+            analysis_override=analysis_for_reply,
+        )
 
         if ai_guidance:
             # Mistral is the primary language-understanding layer. It determines
