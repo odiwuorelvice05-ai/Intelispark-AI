@@ -144,12 +144,30 @@ class IntelisparkEngine:
         positive = [p for score, p in filtered if score > 0]
         return [p for score, p in filtered[:5]] if not positive else positive[:5]
 
-    def generate_reply(self, message: str, products: list[dict[str, Any]], business_name: str = "the shop", context: str = "", business: dict[str, Any] | None = None) -> str:
-        a = self.understand(message, context)
+    def generate_reply(self, message: str, products: list[dict[str, Any]], business_name: str = "the shop", context: str = "", business: dict[str, Any] | None = None, analysis_override: dict[str, Any] | None = None) -> str:
+        a = analysis_override or self.understand(message, context)
         intent, confidence, e = a["intent"], a["confidence"], a["entities"]
         business = business or {}
         description = str(business.get("description") or "").strip()
         top = products[0] if products else None
+        # Generic catalog questions should return a useful catalog slice rather than
+        # whichever product happened to score highest. The catalog remains the source of truth.
+        normalized_message = message.lower().strip()
+        catalog_overview = any(phrase in normalized_message for phrase in (
+            "what do you have in stock",
+            "what is in stock",
+            "what's in stock",
+            "what do you have",
+            "what products do you have",
+            "what products are available",
+            "what is available",
+        ))
+        if catalog_overview and products:
+            available = [p for p in products if int(p.get("stock_quantity") or 0) > 0]
+            if available:
+                return "Here's what is currently in stock:\n\n" + "\n\n".join(self._card(p) for p in available[:5])
+            return "I don't see any products currently marked as in stock in the shop catalog."
+
         if intent == "business_info":
             if description:
                 q = message.lower()
