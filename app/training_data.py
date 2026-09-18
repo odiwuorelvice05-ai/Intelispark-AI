@@ -62,4 +62,12 @@ TRAINING_EXAMPLES = [
     ("thank you so much", "thanks"), ("asante sana", "thanks"), ("shukran", "thanks"),
     ("i have a question", "general"), ("tell me more", "general"),
     ("i need help", "general"), ("what do you sell", "general"),
+    ("what are your opening hours", "business_info"), ("when are you open", "business_info"),
+    ("are you open today", "business_info"), ("what time do you close", "business_info"),
+    ("what is your warranty", "business_info"), ("do you offer warranty", "business_info"),
+    ("what is your return policy", "business_info"), ("can i return a phone", "business_info"),
+    ("what payment methods do you accept", "business_info"), ("how can i pay", "business_info"),
+    ("do you accept mpesa", "business_info"), ("do you take cash", "business_info"),
+    ("tell me about the shop", "business_info"), ("how can i contact the shop", "business_info"),
+    ("what is your phone number", "business_info"),
 ]
