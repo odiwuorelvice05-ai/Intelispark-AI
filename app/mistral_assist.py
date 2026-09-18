@@ -84,12 +84,13 @@ Resolve pronouns and references from the conversation. Understand natural
 English, Kenyan English, Swahili and Sheng. Recognize paraphrases you have
 never seen before. If the customer asks for a product, create a concise
 catalog_query that describes what should be searched. If the message is not a
-catalog request, say so.
+catalog request, say so. For broad requests such as "what do you have", "what is for sale", or "what is in stock", set catalog_scope to "all". For "what else", "another one", or cheaper alternatives, set catalog_scope to "alternatives".
 
 Return ONLY JSON with:
 {
   "intent": "greeting|price|availability|purchase|recommendation|comparison|installment|location|delivery|business_info|identity|owner_contact|general|thanks",
   "catalog_query": "short semantic product search phrase or empty string",
+  "catalog_scope": "all|filtered|alternatives|none",
   "product_type": "phone|laptop|tablet|camera|audio|accessory|other|null",
   "budget_max": number|null,
   "brand": "brand or empty string",
