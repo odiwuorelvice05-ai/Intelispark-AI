@@ -150,6 +150,24 @@ class IntelisparkEngine:
         business = business or {}
         description = str(business.get("description") or "").strip()
         top = products[0] if products else None
+        if intent == "business_info":
+            if description:
+                q = message.lower()
+                groups = {
+                    "hours": ("hour", "open", "close", "opening"),
+                    "warranty": ("warranty", "guarantee"),
+                    "returns": ("return", "refund", "exchange"),
+                    "payment": ("payment", "pay", "mpesa", "m-pesa", "cash", "installment"),
+                    "contact": ("contact", "phone number", "call"),
+                }
+                wanted = next((terms for key, terms in groups.items() if any(x in q for x in terms)), ())
+                relevant = [x.strip() for x in re.split(r"[\n.;]+", description) if any(k in x.lower() for k in wanted)]
+                if relevant:
+                    return "Here is the business information from the shop profile: " + " ".join(relevant[:4])
+            if any(x in message.lower() for x in ("contact", "phone number", "call")) and (business.get("phone") or business.get("whatsapp_number")):
+                return f"You can contact the shop at {business.get('phone') or business.get('whatsapp_number')}."
+            return "I don't see that information in the business profile yet, so I don't want to invent it. The owner can add it to Business knowledge in Settings."
+
         if intent == "location":
             if description:
                 relevant = [x.strip() for x in re.split(r"[\n.;]+", description) if any(k in x.lower() for k in ("location","address","located","shop","branch","pickup","collect"))]
