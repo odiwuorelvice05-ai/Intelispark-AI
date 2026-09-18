@@ -14,6 +14,18 @@
       "destination": "/frontend/style.css"
     },
     {
+      "source": "/design-enhancements.css",
+      "destination": "/frontend/design-enhancements.css"
+    },
+    {
+      "source": "/ai-console.css",
+      "destination": "/frontend/ai-console.css"
+    },
+    {
+      "source": "/conversation-ui.css",
+      "destination": "/frontend/conversation-ui.css"
+    },
+    {
       "source": "/script.js",
       "destination": "/frontend/script.js"
     },
@@ -22,8 +34,24 @@
       "destination": "/frontend/onboarding.js"
     },
     {
-      "source": "/design-enhancements.css",
-      "destination": "/frontend/design-enhancements.css"
+      "source": "/save-feedback.js",
+      "destination": "/frontend/save-feedback.js"
+    },
+    {
+      "source": "/ai-console.js",
+      "destination": "/frontend/ai-console.js"
+    },
+    {
+      "source": "/conversation-ui.js",
+      "destination": "/frontend/conversation-ui.js"
+    },
+    {
+      "source": "/product-delete.js",
+      "destination": "/frontend/product-delete.js"
+    },
+    {
+      "source": "/assets/:path*",
+      "destination": "/frontend/assets/:path*"
     }
   ]
 }
