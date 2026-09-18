@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.intelligence import engine
 from app.supabase_client import supabase
+from app.mistral_assist import mistral_assist
 
 app = FastAPI(title=settings.app_name, description="Independent AI sales intelligence platform", version="0.3.0")
 
@@ -24,7 +25,27 @@ def health():
 
 @app.get("/ai/status")
 def ai_status():
-    return {"name":"Intelispark Sales Intelligence Engine","status":"trained","brain_version":"0.3","training_examples":engine.training_examples,"intent_classes":engine.intent_classes,"capabilities":["intent_detection","entity_extraction","budget_and_condition_constraints","conversation_context","evidence_grounded_product_ranking","sales_signal_detection","business_profile_grounding","policy_and_contact_lookup"],"external_ai_api":False,"knowledge_source":"Supabase product catalog + business profile"}
+    return {
+        "name": "Intelispark Sales Intelligence Engine",
+        "status": "trained",
+        "brain_version": "0.3",
+        "training_examples": engine.training_examples,
+        "intent_classes": engine.intent_classes,
+        "capabilities": [
+            "intent_detection",
+            "entity_extraction",
+            "budget_and_condition_constraints",
+            "conversation_context",
+            "evidence_grounded_product_ranking",
+            "sales_signal_detection",
+            "business_profile_grounding",
+            "policy_and_contact_lookup",
+            "optional_mistral_language_understanding",
+        ],
+        "external_ai_api": mistral_assist.enabled,
+        "mistral_model": mistral_assist.model if mistral_assist.enabled else None,
+        "knowledge_source": "Supabase product catalog + business profile",
+    }
 
 def _conversation_context(conversation_id: str) -> str:
     result=(supabase.table("messages").select("sender_type,message_text,created_at").eq("conversation_id",conversation_id).order("created_at",desc=True).limit(8).execute())
@@ -70,14 +91,65 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
         context=_conversation_context(conversation_id)
         saved=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"customer","message_text":request.customer_message,"channel":"whatsapp"}).execute())
         if not saved.data: raise RuntimeError("Could not save customer message.")
-        products=engine.retrieve_products(request.business_id,request.customer_message,context)
-        business_knowledge=engine.get_business_knowledge(request.business_id)
-        reply=engine.generate_reply(message=request.customer_message,products=products,business_name=business_name,context=context,business=business_knowledge)
+        local_analysis = engine.understand(request.customer_message, context)
+        products = engine.retrieve_products(request.business_id, request.customer_message, context)
+        business_knowledge = engine.get_business_knowledge(request.business_id)
+
+        # Mistral is a selective language-understanding supplement. It is not
+        # the catalog authority and is never required for ordinary requests.
+        ai_guidance = None
+        if mistral_assist.should_call(local_analysis, request.customer_message):
+            ai_guidance = mistral_assist.understand(
+                request.customer_message,
+                context,
+                business_knowledge,
+                products,
+            )
+
+        search_message = request.customer_message
+        if ai_guidance and ai_guidance.get("catalog_query"):
+            search_message = str(ai_guidance["catalog_query"])
+
+        if ai_guidance and search_message != request.customer_message:
+            products = engine.retrieve_products(
+                request.business_id,
+                search_message,
+                context,
+            )
+
+        reply = engine.generate_reply(
+            message=request.customer_message,
+            products=products,
+            business_name=business_name,
+            context=context,
+            business=business_knowledge,
+        )
+
+        # Safe direct responses are allowed only for identity/owner-contact
+        # questions where the model has enough supplied information.
+        if ai_guidance:
+            direct = str(ai_guidance.get("direct_reply") or "").strip()
+            intent = str(ai_guidance.get("intent") or "")
+            if direct and intent in {"identity", "owner_contact"}:
+                reply = direct
         saved_ai=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"ai","message_text":reply,"channel":"whatsapp"}).execute())
         if not saved_ai.data: raise RuntimeError("Could not save Intelispark response.")
         now=datetime.now(timezone.utc).isoformat(); supabase.table("conversations").update({"last_message_at":now,"updated_at":now}).eq("id",conversation_id).execute()
-        analysis=engine.understand(request.customer_message,context)
-        return {"success":True,"conversation_id":conversation_id,"reply":reply,"intelligence":{**analysis,"products_considered":len(products),"model":"local-tfidf-intent-plus-reasoning-v0.3"}}
+        analysis = engine.understand(request.customer_message, context)
+        analysis["mistral_assist"] = {
+            "used": bool(ai_guidance),
+            "model": mistral_assist.model if ai_guidance else None,
+        }
+        return {
+            "success": True,
+            "conversation_id": conversation_id,
+            "reply": reply,
+            "intelligence": {
+                **analysis,
+                "products_considered": len(products),
+                "model": "local-intent-reasoning + selective-mistral",
+            },
+        }
     except HTTPException: raise
     except Exception as error: raise HTTPException(status_code=500,detail=str(error))
 
