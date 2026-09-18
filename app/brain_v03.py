@@ -81,15 +81,17 @@ class IntelisparkEngine:
                   .eq("id", business_id).limit(1).execute())
         return result.data[0] if result.data else {}
 
-    def retrieve_products(self, business_id: str, message: str, context: str = "") -> list[dict[str, Any]]:
+    def retrieve_products(self, business_id: str, message: str, context: str = "", analysis_override: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         result = (supabase.table("products")
                   .select("id,name,brand,category,variant,condition,price,stock_quantity,description,specs,installment_available")
                   .eq("business_id", business_id).limit(200).execute())
         products = result.data or []
         if not products:
             return []
-        analysis = self.understand(message, context)
-        e = analysis["entities"]
+        analysis = analysis_override or self.understand(message, context)
+        e = dict(analysis.get("entities") or {})
+        analysis = dict(analysis)
+        analysis["entities"] = e
         # Older preferences are inherited only for short follow-ups.
         context_analysis = self.understand(context, "") if context.strip() else {"entities": {}}
         context_e = context_analysis.get("entities", {})
