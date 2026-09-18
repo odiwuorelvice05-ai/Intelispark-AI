@@ -75,6 +75,12 @@ class IntelisparkEngine:
             },
         }
 
+    def get_business_knowledge(self, business_id: str) -> dict[str, Any]:
+        result = (supabase.table("businesses")
+                  .select("name,phone,email,industry,description,whatsapp_number,timezone")
+                  .eq("id", business_id).limit(1).execute())
+        return result.data[0] if result.data else {}
+
     def retrieve_products(self, business_id: str, message: str, context: str = "") -> list[dict[str, Any]]:
         result = (supabase.table("products")
                   .select("id,name,brand,category,variant,condition,price,stock_quantity,description,specs,installment_available")
@@ -138,10 +144,26 @@ class IntelisparkEngine:
         positive = [p for score, p in filtered if score > 0]
         return [p for score, p in filtered[:5]] if not positive else positive[:5]
 
-    def generate_reply(self, message: str, products: list[dict[str, Any]], business_name: str = "the shop", context: str = "") -> str:
+    def generate_reply(self, message: str, products: list[dict[str, Any]], business_name: str = "the shop", context: str = "", business: dict[str, Any] | None = None) -> str:
         a = self.understand(message, context)
         intent, confidence, e = a["intent"], a["confidence"], a["entities"]
+        business = business or {}
+        description = str(business.get("description") or "").strip()
         top = products[0] if products else None
+        if intent == "location":
+            if description:
+                relevant = [x.strip() for x in re.split(r"[\n.;]+", description) if any(k in x.lower() for k in ("location","address","located","shop","branch","pickup","collect"))]
+                if relevant:
+                    return "Here is the shop information from its business profile: " + " ".join(relevant[:3])
+            if business.get("phone") or business.get("whatsapp_number"):
+                return f"I don't have the full shop address in the profile yet. You can contact the shop at {business.get("phone") or business.get("whatsapp_number")} to confirm the exact location."
+            return "I don't have a full shop address in the business profile yet, so I don't want to invent one. The owner can add it to Business knowledge in Settings."
+        if intent == "delivery":
+            if description:
+                relevant = [x.strip() for x in re.split(r"[\n.;]+", description) if any(k in x.lower() for k in ("delivery","deliver","shipping","courier","fee"))]
+                if relevant:
+                    return "Here is the delivery information from the business profile: " + " ".join(relevant[:3])
+            return "I don't see a delivery policy or fee in the business profile yet. The shop owner can add those details to Business knowledge in Settings."
         if intent == "greeting" and not e.get("product_type") and not any(x in message.lower() for x in ("power adapter", "adapter", "charger", "cable", "earphones", "earbuds", "headphones", "power bank", "case", "cover", "woofer", "speaker", "subwoofer", "sound system", "home theater", "home theatre", "laptop", "camera", "tablet", "ipad", "macbook", "phone", "smartphone", "mobile")):
             return f"Hi! 👋 Welcome to {business_name}. What phone or device are you looking for?"
         if not products:
