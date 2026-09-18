@@ -118,41 +118,44 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
 
         search_message = request.customer_message
         analysis_for_reply = local_analysis
-        if ai_guidance and ai_guidance.get("catalog_query"):
-            search_message = str(ai_guidance["catalog_query"])
 
         if ai_guidance:
-            # Feed only structured interpretation back into Intelispark's local
-            # response engine. The model can clarify meaning, but it cannot
-            # become the source of truth.
+            # Mistral is the primary language-understanding layer. It determines
+            # what the customer means; Intelispark still retrieves only verified
+            # products from this shop's Supabase catalog.
             guided_intent = str(ai_guidance.get("intent") or "").strip()
             valid_intents = set(engine.intent_classes) | {
                 "identity", "owner_contact", "general", "thanks"
             }
+            analysis_for_reply = dict(local_analysis)
             if guided_intent in valid_intents:
-                analysis_for_reply = dict(local_analysis)
                 analysis_for_reply["intent"] = guided_intent
-                analysis_for_reply["confidence"] = max(
-                    float(local_analysis.get("confidence") or 0),
-                    float(ai_guidance.get("confidence") or 0),
-                )
-                guided_entities = dict(local_analysis.get("entities") or {})
-                product_type = ai_guidance.get("product_type")
-                brand = str(ai_guidance.get("brand") or "").strip().lower()
-                budget = ai_guidance.get("budget_max")
-                if product_type in {"phone", "laptop", "tablet", "camera", "audio", "accessory"}:
-                    guided_entities["product_type"] = product_type
-                if brand:
-                    guided_entities["brands"] = [brand]
-                if budget is not None:
-                    guided_entities["budget_max"] = budget
-                analysis_for_reply["entities"] = guided_entities
+            analysis_for_reply["confidence"] = max(
+                float(local_analysis.get("confidence") or 0),
+                float(ai_guidance.get("confidence") or 0),
+            )
 
-            if search_message != request.customer_message:
+            guided_entities = dict(local_analysis.get("entities") or {})
+            product_type = ai_guidance.get("product_type")
+            brand = str(ai_guidance.get("brand") or "").strip().lower()
+            budget = ai_guidance.get("budget_max")
+            if product_type in {"phone", "laptop", "tablet", "camera", "audio", "accessory"}:
+                guided_entities["product_type"] = product_type
+            if brand:
+                guided_entities["brands"] = [brand]
+            if budget is not None:
+                guided_entities["budget_max"] = budget
+            analysis_for_reply["entities"] = guided_entities
+
+            if ai_guidance.get("catalog_query") or ai_guidance.get("needs_catalog"):
+                search_message = str(
+                    ai_guidance.get("catalog_query") or request.customer_message
+                )
                 products = engine.retrieve_products(
                     request.business_id,
                     search_message,
                     context,
+                    analysis_override=analysis_for_reply,
                 )
 
             excluded = {
@@ -165,6 +168,10 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
                     p for p in products
                     if str(p.get("name") or "").strip().lower() not in excluded
                 ]
+                products = [
+                    p for p in products
+                    if int(p.get("stock_quantity") or 0) > 0
+                ]
 
         reply = engine.generate_reply(
             message=request.customer_message,
@@ -175,12 +182,12 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
             analysis_override=analysis_for_reply,
         )
 
-        # Safe direct responses are allowed only for identity/owner-contact
-        # questions where the model has enough supplied information.
+        # Mistral may provide a conversational direct response when it does not
+        # require catalog facts. Catalog/business facts still come from Intelispark.
         if ai_guidance:
             direct = str(ai_guidance.get("direct_reply") or "").strip()
             intent = str(ai_guidance.get("intent") or "")
-            if direct and intent in {"identity", "owner_contact"}:
+            if direct and intent in {"identity", "owner_contact", "general"}:
                 reply = direct
         saved_ai=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"ai","message_text":reply,"channel":"whatsapp"}).execute())
         if not saved_ai.data: raise RuntimeError("Could not save Intelispark response.")
