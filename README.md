@@ -43,7 +43,9 @@ CUSTOMER
 
 ## Intelligence Core
 
-The project contains a local supervised machine-learning model trained on a version-controlled commerce dataset. It requires **no OpenAI or other external AI API key**.
+The project keeps a local supervised machine-learning model as its first-line intelligence and adds an **optional Mistral Small 4 language-understanding supplement** for ambiguous, contextual, or low-confidence messages. Mistral does not replace the local engine and is never the source of truth. Supabase remains authoritative for business and product facts.
+
+When `MISTRAL_API_KEY` is absent, Intelispark continues to operate entirely through its local intelligence. When configured, Mistral is called selectively to conserve tokens and improve natural-language understanding.
 
 ### Intelligence pipeline
 
@@ -51,6 +53,8 @@ The project contains a local supervised machine-learning model trained on a vers
 Customer WhatsApp message
       ↓
 Local trained intent model
+      ↓
+Selective Mistral language understanding (only when needed)
       ↓
 Conversation context
       ↓
@@ -102,7 +106,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the local environment. Never commit `.env` or secret credentials.
+Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the local environment. Optionally configure `MISTRAL_API_KEY` and `MISTRAL_MODEL`. Never commit `.env` or secret credentials.
 
 ## Product roadmap
 
