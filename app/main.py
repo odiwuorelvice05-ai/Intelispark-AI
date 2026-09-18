@@ -40,7 +40,7 @@ def ai_status():
             "sales_signal_detection",
             "business_profile_grounding",
             "policy_and_contact_lookup",
-            "optional_mistral_language_understanding",
+            "mistral_primary_language_understanding",
         ],
         "external_ai_api": mistral_assist.enabled,
         "mistral_model": mistral_assist.model if mistral_assist.enabled else None,
@@ -92,23 +92,20 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
         saved=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"customer","message_text":request.customer_message,"channel":"whatsapp"}).execute())
         if not saved.data: raise RuntimeError("Could not save customer message.")
         local_analysis = engine.understand(request.customer_message, context)
-        products = engine.retrieve_products(request.business_id, request.customer_message, context)
         business_knowledge = engine.get_business_knowledge(request.business_id)
 
-        # Mistral is a selective language-understanding supplement. It is not
-        # the catalog authority and is never required for ordinary requests.
+        # Mistral is now the primary language interpreter. It sees the full
+        # shop catalog before Intelispark performs authoritative retrieval.
+        catalog_result = (
+            supabase.table("products")
+            .select("id,name,brand,category,variant,condition,price,stock_quantity,description,specs,installment_available")
+            .eq("business_id", request.business_id)
+            .limit(200)
+            .execute()
+        )
+        catalog_for_ai = catalog_result.data or []
         ai_guidance = None
         if mistral_assist.should_call(local_analysis, request.customer_message):
-            # Mistral gets the full catalog for semantic understanding, while
-            # Supabase remains the authoritative source of every product fact.
-            catalog_result = (
-                supabase.table("products")
-                .select("id,name,brand,category,variant,condition,price,stock_quantity,description,specs,installment_available")
-                .eq("business_id", request.business_id)
-                .limit(200)
-                .execute()
-            )
-            catalog_for_ai = catalog_result.data or []
             ai_guidance = mistral_assist.understand(
                 request.customer_message,
                 context,
@@ -151,12 +148,19 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
                 search_message = str(
                     ai_guidance.get("catalog_query") or request.customer_message
                 )
-                products = engine.retrieve_products(
-                    request.business_id,
-                    search_message,
-                    context,
-                    analysis_override=analysis_for_reply,
-                )
+                scope = str(ai_guidance.get("catalog_scope") or "").strip().lower()
+                if scope == "all":
+                    products = [
+                        p for p in catalog_for_ai
+                        if int(p.get("stock_quantity") or 0) > 0
+                    ]
+                else:
+                    products = engine.retrieve_products(
+                        request.business_id,
+                        search_message,
+                        context,
+                        analysis_override=analysis_for_reply,
+                    )
 
             excluded = {
                 str(name).strip().lower()
@@ -167,11 +171,14 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
                 products = [
                     p for p in products
                     if str(p.get("name") or "").strip().lower() not in excluded
+                    and int(p.get("stock_quantity") or 0) > 0
                 ]
-                products = [
-                    p for p in products
-                    if int(p.get("stock_quantity") or 0) > 0
-                ]
+                if not products:
+                    products = [
+                        p for p in catalog_for_ai
+                        if str(p.get("name") or "").strip().lower() not in excluded
+                        and int(p.get("stock_quantity") or 0) > 0
+                    ]
 
         reply = engine.generate_reply(
             message=request.customer_message,
@@ -204,7 +211,7 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
             "intelligence": {
                 **analysis,
                 "products_considered": len(products),
-                "model": "local-intent-reasoning + selective-mistral",
+                "model": "mistral-language-understanding + Intelispark-grounded-reasoning",
             },
         }
     except HTTPException: raise
