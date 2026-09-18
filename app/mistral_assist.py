@@ -31,12 +31,24 @@ class MistralAssist:
         entities = analysis.get("entities") or {}
         text = message.strip()
 
-        # Mistral is the main conversational interpreter. Keep obvious
-        # greetings and exact high-confidence factual lookups local to control
-        # token use.
+        # Keep truly standalone greetings and exact high-confidence business
+        # lookups local. Do not skip Mistral merely because the cheap classifier
+        # called something a greeting: brand/product questions such as
+        # "is Vitron a good brand?" still need semantic interpretation.
+        lower = text.lower()
+        has_catalog_signal = (
+            bool(entities.get("product_type"))
+            or bool(entities.get("brands"))
+            or any(word in lower for word in (
+                "price", "cost", "how much", "available", "in stock",
+                "buy", "need", "looking for", "good brand", "worth",
+                "recommend", "compare", "cheaper", "another", "what else",
+                "woofer", "speaker", "charger", "mouse", "keyboard",
+            ))
+        )
         if confidence >= 0.88 and intent in {
             "greeting", "location", "delivery", "business_info"
-        }:
+        } and not has_catalog_signal:
             return False
 
         # Catalog and conversational requests benefit from semantic understanding,
