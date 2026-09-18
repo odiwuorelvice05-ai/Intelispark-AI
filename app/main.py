@@ -24,7 +24,7 @@ def health():
 
 @app.get("/ai/status")
 def ai_status():
-    return {"name":"Intelispark Sales Intelligence Engine","status":"trained","brain_version":"0.3","training_examples":engine.training_examples,"intent_classes":engine.intent_classes,"capabilities":["intent_detection","entity_extraction","budget_and_condition_constraints","conversation_context","evidence_grounded_product_ranking","sales_signal_detection"],"external_ai_api":False,"knowledge_source":"Supabase product catalog"}
+    return {"name":"Intelispark Sales Intelligence Engine","status":"trained","brain_version":"0.3","training_examples":engine.training_examples,"intent_classes":engine.intent_classes,"capabilities":["intent_detection","entity_extraction","budget_and_condition_constraints","conversation_context","evidence_grounded_product_ranking","sales_signal_detection","business_profile_grounding","policy_and_contact_lookup"],"external_ai_api":False,"knowledge_source":"Supabase product catalog + business profile"}
 
 def _conversation_context(conversation_id: str) -> str:
     result=(supabase.table("messages").select("sender_type,message_text,created_at").eq("conversation_id",conversation_id).order("created_at",desc=True).limit(8).execute())
@@ -71,7 +71,8 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
         saved=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"customer","message_text":request.customer_message,"channel":"whatsapp"}).execute())
         if not saved.data: raise RuntimeError("Could not save customer message.")
         products=engine.retrieve_products(request.business_id,request.customer_message,context)
-        reply=engine.generate_reply(message=request.customer_message,products=products,business_name=business_name,context=context)
+        business_knowledge=engine.get_business_knowledge(request.business_id)
+        reply=engine.generate_reply(message=request.customer_message,products=products,business_name=business_name,context=context,business=business_knowledge)
         saved_ai=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"ai","message_text":reply,"channel":"whatsapp"}).execute())
         if not saved_ai.data: raise RuntimeError("Could not save Intelispark response.")
         now=datetime.now(timezone.utc).isoformat(); supabase.table("conversations").update({"last_message_at":now,"updated_at":now}).eq("id",conversation_id).execute()
