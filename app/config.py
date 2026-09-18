@@ -15,5 +15,9 @@ class Settings:
         ""
     )
 
+    # Optional language-model supplement. Leave blank to run Intelispark locally.
+    mistral_api_key: str = os.getenv("MISTRAL_API_KEY", "")
+    mistral_model: str = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
+
 
 settings = Settings()
