@@ -4,6 +4,26 @@
   const font=document.createElement('link');font.rel='stylesheet';font.href='https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap';document.head.appendChild(font);
   const visual=document.createElement('link');visual.rel='stylesheet';visual.href='./design-enhancements.css';document.head.appendChild(visual);
 
+  // Where Supabase sends people after they click "Confirm email". Must be listed in
+  // Supabase > Authentication > URL Configuration (Site URL / Redirect URLs).
+  const EMAIL_REDIRECT_URL='https://intelispark-ai.vercel.app';
+
+  function friendlyAuthError(error){
+    const msg=String(error?.message||'');
+    if(error?.code==='email_not_confirmed'||/email not confirmed/i.test(msg))return 'Please confirm your email first. Check your inbox for the confirmation link.';
+    if(error?.code==='over_email_send_rate_limit'||/rate limit/i.test(msg))return 'Too many attempts. Please wait a minute and try again.';
+    return msg||'Authentication failed. Please try again.';
+  }
+
+  // Supabase appends #error=...&error_code=otp_expired (or ?error=...) when a confirmation link is expired or reused.
+  function readAuthReturnError(){
+    try{
+      const p=new URLSearchParams((location.hash||'').replace(/^#/,'')+'&'+(location.search||'').replace(/^\?/,''));
+      const code=p.get('error_code')||p.get('error');
+      return code||p.get('error_description')?{code}:null;
+    }catch{return null;}
+  }
+
   window.brand=function(){
     return `<div class="brand"><div class="logo" aria-label="Intelispark AI logo"><span class="logo-mark">✦</span></div><div class="brand-name">Intelispark <span>AI</span></div></div>`;
   };
@@ -39,8 +59,19 @@
     if(form)form.addEventListener('submit',authSubmit);
   };
 
+  window.renderCheckEmail=function(email){
+    document.body.innerHTML=`<div class="auth-wrap"><div class="auth-card">${brand()}
+      <h1>Check Your Email</h1>
+      <p>We've sent a confirmation link to <b style="color:white">${esc(email)}</b>. Click the link to verify your account and continue to Intelispark.</p>
+      <button type="button" class="primary auth-submit" onclick="APP.authMode='login';renderAuth()">Back to Log In</button>
+      <button type="button" class="back-link" onclick="APP.authMode='signup';renderAuth()">Wrong email? Back to Sign Up</button>
+      <p style="font-size:11px;margin-top:18px;color:#626d80">Can't see it? Check your spam folder. It can take a minute to arrive.</p>
+    </div></div>`;
+  };
+
   window.authSubmit=async function(e){
     e.preventDefault();
+    if(APP.authBusy)return;
     const form=e.currentTarget||$('#authForm');
     const button=form?.querySelector('.auth-submit');
     try{
@@ -49,24 +80,29 @@
       const password=$('#authPassword')?.value||'';
       if(!email)return toast('Enter your email address.');
       if(password.length<6)return toast('Password must be at least 6 characters.');
-      if(button){button.disabled=true;button.textContent=APP.authMode==='signup'?'Creating account…':'Signing in…';}
+      APP.authBusy=true;
+      if(button){button.disabled=true;button.textContent=APP.authMode==='signup'?'Creating account...':'Signing in...';}
       const result=APP.authMode==='login'
         ?await APP.supabase.auth.signInWithPassword({email,password})
-        :await APP.supabase.auth.signUp({email,password});
+        :await APP.supabase.auth.signUp({email,password,options:{emailRedirectTo:EMAIL_REDIRECT_URL}});
       if(result.error)throw result.error;
       if(APP.authMode==='signup'&&!result.data.session){
-        toast('Account created. Check your email to confirm, then log in.');
-        APP.authMode='login';
-        setTimeout(renderAuth,500);
+        // Supabase hides duplicates: an already-registered email comes back with no identities and no error.
+        if(Array.isArray(result.data.user?.identities)&&result.data.user.identities.length===0){
+          APP.authMode='login';renderAuth();
+          toast('An account with this email already exists. Please log in.');
+          return;
+        }
+        renderCheckEmail(email);
         return;
       }
       APP.user=result.data.user;
       await enterWorkspace();
     }catch(error){
       console.error('[Intelispark auth]',error);
-      toast(error?.message||'Authentication failed. Please try again.');
-      if(button){button.disabled=false;button.textContent=APP.authMode==='signup'?'Create account':'Log in';}
-    }
+      toast(friendlyAuthError(error));
+      if(button?.isConnected){button.disabled=false;button.textContent=APP.authMode==='signup'?'Create account':'Log in';}
+    }finally{APP.authBusy=false;}
   };
 
   window.enterWorkspace=async function(){
@@ -170,15 +206,22 @@
   };
 
   window.addEventListener('DOMContentLoaded',async()=>{
+    // Expired/reused confirmation link: read the error, then clean the URL before the Supabase client sees it.
+    const returnError=readAuthReturnError();
+    if(returnError){try{history.replaceState(null,'',location.pathname);}catch{}}
     if(!initSupabase())return;
     try{
       const {data,error}=await APP.supabase.auth.getSession();
       if(error)throw error;
-      if(data.session){APP.user=data.session.user;await enterWorkspace();}
-      else { landing(); }
+      if(data.session){APP.user=data.session.user;await enterWorkspace();return;}
+      if(returnError){
+        APP.authMode='login';renderAuth();
+        toast('That confirmation link has expired or was already used. If you have already confirmed your email, log in below.');
+      }else{landing();}
     }catch(error){
       console.error('[Intelispark session]',error);
-      toast(error?.message||'Could not restore your session.');
+      landing();
+      toast('We could not restore your session. Please log in again.');
     }
   });
 })();
