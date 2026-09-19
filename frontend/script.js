@@ -1,5 +1,5 @@
 /* Intelispark AI — browser application layer. No external AI API is used here. */
-const APP = {name:'Intelispark AI', supabase:null, user:null, business:null, products:[], customers:[], conversations:[], tab:'overview', authMode:'login', config:null};
+const APP = {name:'Intelispark AI', supabase:null, user:null, business:null, products:[], customers:[], conversations:[], tab:'overview', authMode:'signup', config:null};
 const ICONS={overview:'▦',products:'◈',inventory:'▤',customers:'♙',conversations:'◌',orders:'⌁',ai:'✦',settings:'⚙'};
 const $=s=>document.querySelector(s); const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 function toast(msg){
