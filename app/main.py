@@ -224,7 +224,9 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
             },
         }
     except HTTPException: raise
-    except Exception as error: raise HTTPException(status_code=500,detail=str(error))
+    except Exception as error:
+        print(f"[Intelispark sales reply] {error!r}")
+        raise HTTPException(status_code=500,detail="Intelligence service error. Please try again.")
 
 app.add_api_route("/api/health",health,methods=["GET"])
 app.add_api_route("/api/ai/status",ai_status,methods=["GET"])

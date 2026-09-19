@@ -143,6 +143,15 @@
     }
   }
 
+  window.logout=async function(){
+    try{
+      if(APP.supabase) await APP.supabase.auth.signOut();
+    }catch(error){console.error('[Intelispark logout]',error);}
+    APP.user=null;APP.business=null;APP.products=[];APP.customers=[];APP.conversations=[];
+    APP.tab='overview';APP.authMode='login';
+    landing();
+  };
+
   window.renderSettings=function(p){
     p.innerHTML=head('Settings','Manage your business knowledge and workspace preferences.')+
       `<div class="card form-card"><div class="section-kicker">BUSINESS PROFILE</div>
@@ -166,6 +175,7 @@
       const {data,error}=await APP.supabase.auth.getSession();
       if(error)throw error;
       if(data.session){APP.user=data.session.user;await enterWorkspace();}
+      else { landing(); }
     }catch(error){
       console.error('[Intelispark session]',error);
       toast(error?.message||'Could not restore your session.');
