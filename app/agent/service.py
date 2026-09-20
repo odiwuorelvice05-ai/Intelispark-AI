@@ -32,6 +32,9 @@ def _get_provider() -> AIProvider | None:
         except ProviderError as exc:
             print(f"[Intelispark agent] provider unavailable: {exc}")
             return None
+        print(f"[Intelispark agent] provider={_provider.name} model={_provider.model} enabled={_provider.enabled} "
+              f"reasoning_effort={getattr(_provider, 'reasoning_effort', None) or 'unset'}"
+              + ("" if _provider.enabled else " (not configured: legacy engine will answer)"))
     return _provider if _provider.enabled else None
 
 
