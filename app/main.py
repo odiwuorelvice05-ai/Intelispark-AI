@@ -7,6 +7,7 @@ from app.config import settings
 from app.intelligence import engine
 from app.supabase_client import supabase
 from app.mistral_assist import mistral_assist
+from app.agent.service import agent_enabled, run_agent_turn, status as agent_status
 
 app = FastAPI(title=settings.app_name, description="Independent AI sales intelligence platform", version="0.3.0")
 
@@ -45,12 +46,17 @@ def ai_status():
         "external_ai_api": mistral_assist.enabled,
         "mistral_model": mistral_assist.model if mistral_assist.enabled else None,
         "knowledge_source": "Supabase product catalog + business profile",
+        "agent": agent_status(),
     }
 
 def _conversation_context(conversation_id: str) -> str:
     result=(supabase.table("messages").select("sender_type,message_text,created_at").eq("conversation_id",conversation_id).order("created_at",desc=True).limit(8).execute())
     messages=result.data or []; messages.reverse()
     return "\n".join(f"{item.get('sender_type','unknown')}: {item.get('message_text','')}" for item in messages if item.get("message_text"))
+
+def _history_rows(conversation_id: str, limit: int = 12) -> list[dict]:
+    result=(supabase.table("messages").select("sender_type,message_text,created_at").eq("conversation_id",conversation_id).order("created_at",desc=True).limit(limit).execute())
+    rows=result.data or []; rows.reverse(); return rows
 
 def _require_owner(business_id: str, authorization: str | None) -> dict:
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -89,8 +95,19 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
             if not new_conversation.data: raise RuntimeError("Could not create conversation.")
             conversation_id=new_conversation.data[0]["id"]
         context=_conversation_context(conversation_id)
+        history_rows=_history_rows(conversation_id) if agent_enabled() else []
         saved=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"customer","message_text":request.customer_message,"channel":"whatsapp"}).execute())
         if not saved.data: raise RuntimeError("Could not save customer message.")
+        if agent_enabled():
+            # Tool-calling agent (feature-flagged). Returns None whenever it cannot give a grounded
+            # answer, in which case the legacy pipeline below answers exactly as before.
+            outcome = run_agent_turn(db=supabase, business=business, conversation_id=conversation_id, customer_id=customer_id,
+                                     customer_message=request.customer_message, history_rows=history_rows)
+            if outcome is not None:
+                saved_ai=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"ai","message_text":outcome.reply,"channel":"whatsapp"}).execute())
+                if not saved_ai.data: raise RuntimeError("Could not save Intelispark response.")
+                now=datetime.now(timezone.utc).isoformat(); supabase.table("conversations").update({"last_message_at":now,"updated_at":now}).eq("id",conversation_id).execute()
+                return {"success": True, "conversation_id": conversation_id, "reply": outcome.reply, "intelligence": outcome.intelligence}
         local_analysis = engine.understand(request.customer_message, context)
         business_knowledge = engine.get_business_knowledge(request.business_id)
 
