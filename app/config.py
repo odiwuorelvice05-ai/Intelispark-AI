@@ -19,8 +19,8 @@ class Settings:
     mistral_api_key: str = os.getenv("MISTRAL_API_KEY", "")
     mistral_model: str = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
 
-    # Agent (tool-calling) mode. Off by default: with INTELISPARK_AGENT unset the legacy engine runs unchanged.
-    agent_mode: str = os.getenv("INTELISPARK_AGENT", "off").strip().lower()      # "on" | "off"
+    # Agent (tool-calling) mode. ON by default so the real Mistral agent is used when its Vercel key is configured.
+    agent_mode: str = os.getenv("INTELISPARK_AGENT", "on").strip().lower()      # "on" | "off"
     ai_provider: str = os.getenv("AI_PROVIDER", "mistral").strip().lower()
     agent_model: str = os.getenv("AGENT_MODEL", "").strip() or os.getenv("MISTRAL_MODEL", "mistral-small-latest")
     agent_reasoning_effort: str = os.getenv("AGENT_REASONING_EFFORT", "").strip()
