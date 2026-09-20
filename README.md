@@ -43,44 +43,20 @@ CUSTOMER
 
 ## Intelligence Core
 
-The project keeps a local supervised machine-learning model as its first-line intelligence and adds an **optional Mistral Small 4 language-understanding supplement** for ambiguous, contextual, or low-confidence messages. Mistral does not replace the local engine and is never the source of truth. Supabase remains authoritative for business and product facts.
-
-When `MISTRAL_API_KEY` is absent, Intelispark continues to operate entirely through its local intelligence. When configured, Mistral is called selectively to conserve tokens and improve natural-language understanding.
-
-### Intelligence pipeline
+The customer-facing intelligence lives in `app/assistant/` and is described in [`docs/INTELLIGENCE.md`](docs/INTELLIGENCE.md).
+A foundation model (behind a replaceable provider interface) understands the customer's message in any language, decides what
+it needs, and calls tenant-bound tools that read the shop's real catalog and profile from Supabase. A grounding check refuses
+any reply whose prices, stock or order claims contradict those facts, and the application owns structured conversation state.
+Supabase is the only source of truth for business and product facts; the assistant never creates orders, it hands them to the owner.
 
 ```text
-Customer WhatsApp message
-      ↓
-Local trained intent model
-      ↓
-Selective Mistral language understanding (only when needed)
-      ↓
-Conversation context
-      ↓
-Product/catalog retrieval from Supabase
-      ↓
-Product matching and ranking
-      ↓
-Stock + price + condition reasoning
-      ↓
-Recommendation / comparison / purchase strategy
-      ↓
-Grounded sales response
-      ↓
-Conversation stored in Supabase
+Customer message -> owner-authenticated tenant -> conversation + history
+      -> model <-> tools (search_products / get_products / get_shop_info / escalate_to_owner)
+      -> grounded reply (or a controlled "temporarily unavailable")
+      -> stored in Supabase with validated conversation state
 ```
 
-### Current model
-
-- TF-IDF text representation
-- Logistic Regression intent classifier
-- Domain training dataset focused on electronics commerce and Kenyan/WhatsApp language
-- Intent classes: greeting, price, availability, purchase, recommendation, comparison, installment, location, delivery, appointment, thanks, general
-- Model trains locally when the application starts
-- Product facts are grounded in the shop's Supabase catalog
-- Conversation history is used as context
-- No external generative AI API is required
+Requires `LLM_API_KEY` (see `.env.example`). Without it the API returns a controlled 503 for `/sales/reply`; the rest of the app is unaffected.
 
 ### Product knowledge layer
 
@@ -93,9 +69,9 @@ The product catalog contains new/refurbished phones, prices, stock, specificatio
 ## API
 
 - `GET /` — service identity
-- `GET /health` — health and intelligence status
-- `GET /ai/status` — model/training status
-- `POST /sales/reply` — customer message → conversation context → Intelispark intelligence → real product retrieval → grounded sales response
+- `GET /health` — service health
+- `GET /ai/status` — whether the assistant is configured and which model
+- `POST /sales/reply` — customer message → conversation context → assistant → tenant-scoped catalog tools → grounded sales response
 
 The current `/sales/reply` endpoint is the **internal intelligence loop**. It is not yet the real WhatsApp webhook/API integration.
 
@@ -106,20 +82,18 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the local environment. Optionally configure `MISTRAL_API_KEY` and `MISTRAL_MODEL`. Never commit `.env` or secret credentials.
+Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the local environment. Configure `LLM_API_KEY` (and optionally `LLM_BASE_URL`, `LLM_MODEL`) for the assistant. Never commit `.env` or secret credentials.
 
 ## Product roadmap
 
-1. **Intelligence core** — local understanding, retrieval, reasoning and conversation context. **Current foundation complete.**
+1. **Intelligence core** — model-based understanding, tenant-scoped retrieval, grounding and structured conversation state. **Foundation in place; measure it with `scripts/live_eval.py`.**
 2. **Shop onboarding + dashboard** — owner account, business creation, product management, inventory, product images via Supabase Storage, and shop-scoped data access. **Next build milestone.**
 3. **WhatsApp channel** — connect each shop's real WhatsApp number so customer messages enter Intelispark and responses return to the same shop/customer.
 4. **Live dashboard activity** — real-time conversations, AI activity, inventory changes and sales signals.
 5. **Orders and payments** — turn qualified conversations into real orders and payment workflows.
-6. **Learning loop** — use anonymised real conversations and outcomes to improve the local intelligence system.
+6. **Learning loop** — use anonymised real conversations and outcomes to improve prompts, tools and evaluation.
 
 ### Development principle
 
 Build and test the system as a real multi-tenant commerce product: **WhatsApp is the customer interface, the dashboard is the shop-owner interface, Supabase Database is the structured business knowledge/data layer, Supabase Storage is the business media layer, and Intelispark AI is the intelligence layer connecting them.**
 
-
-<!-- Production rollback marker: preserved last known-good application code. -->
