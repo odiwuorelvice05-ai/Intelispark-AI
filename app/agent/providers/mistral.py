@@ -1,4 +1,4 @@
-""""Mistral implementation of AIProvider (chat + native function calling)."""
+"""Mistral implementation of AIProvider (chat + native function calling)."""
 from __future__ import annotations
 
 import json
@@ -21,14 +21,14 @@ class MistralProvider(AIProvider):
             try:  # lazy: the SDK is only needed when a key is configured
                 from mistralai.client import Mistral
                 self._client = Mistral(api_key=api_key)
-            except Exception:
+            except Exception as exc:  # class name only: init errors must never echo the key
+                print(f"[Intelispark agent] Mistral client init failed: {type(exc).__name__}")
                 self._client = None
 
     @property
     def enabled(self) -> bool:
         return self._client is not None
 
-    # ---- translation -----------------------------------------------------
     @staticmethod
     def _wire_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         wire: list[dict[str, Any]] = []
@@ -57,7 +57,7 @@ class MistralProvider(AIProvider):
     def _text(content: Any) -> str:
         if isinstance(content, str):
             return content
-        if isinstance(content, list):  # chunked content; keep visible text only (drop reasoning chunks)
+        if isinstance(content, list):
             return "".join(getattr(p, "text", "") for p in content if getattr(p, "type", "text") == "text")
         return ""
 
@@ -87,7 +87,6 @@ class MistralProvider(AIProvider):
             latency_ms=latency_ms,
         )
 
-    # ---- the one primitive -------------------------------------------------
     def chat(self, messages, tools=None, *, tool_choice="auto", json_mode=False,
              max_tokens=700, temperature=0.2, timeout_s=15.0) -> AssistantTurn:
         if not self.enabled:
@@ -105,6 +104,6 @@ class MistralProvider(AIProvider):
         started = time.monotonic()
         try:
             resp = self._client.chat.complete(**kwargs)
-        except Exception as exc:  # network, auth, rate limit, malformed request...
+        except Exception as exc:
             raise ProviderError(f"mistral request failed: {type(exc).__name__}: {str(exc)[:200]}") from exc
         return self._parse(resp, int((time.monotonic() - started) * 1000))
