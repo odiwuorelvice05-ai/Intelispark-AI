@@ -33,15 +33,9 @@ def ai_status():
         "training_examples": engine.training_examples,
         "intent_classes": engine.intent_classes,
         "capabilities": [
-            "intent_detection",
-            "entity_extraction",
-            "budget_and_condition_constraints",
-            "conversation_context",
-            "evidence_grounded_product_ranking",
-            "sales_signal_detection",
-            "business_profile_grounding",
-            "policy_and_contact_lookup",
-            "mistral_primary_language_understanding",
+            "intent_detection","entity_extraction","budget_and_condition_constraints",
+            "conversation_context","evidence_grounded_product_ranking","sales_signal_detection",
+            "business_profile_grounding","policy_and_contact_lookup","mistral_primary_language_understanding",
         ],
         "external_ai_api": mistral_assist.enabled,
         "mistral_model": mistral_assist.model if mistral_assist.enabled else None,
@@ -50,13 +44,22 @@ def ai_status():
     }
 
 def _conversation_context(conversation_id: str) -> str:
-    result=(supabase.table("messages").select("sender_type,message_text,created_at").eq("conversation_id",conversation_id).order("created_at",desc=True).limit(8).execute())
-    messages=result.data or []; messages.reverse()
-    return "\n".join(f"{item.get('sender_type','unknown')}: {item.get('message_text','')}" for item in messages if item.get("message_text"))
+    try:
+        result=(supabase.table("messages").select("sender_type,message_text,created_at").eq("conversation_id",conversation_id).order("created_at",desc=True).limit(8).execute())
+        messages=result.data or []
+        messages.reverse()
+        return "\n".join(f"{item.get('sender_type','unknown')}: {item.get('message_text','')}" for item in messages if item.get("message_text"))
+    except Exception as exc:
+        # Conversation history is helpful context, but it is never authoritative
+        # and must never turn an otherwise valid product request into HTTP 500.
+        print(f"[Intelispark context] history unavailable; continuing without context: {exc!r}")
+        return ""
 
 def _history_rows(conversation_id: str, limit: int = 12) -> list[dict]:
     result=(supabase.table("messages").select("sender_type,message_text,created_at").eq("conversation_id",conversation_id).order("created_at",desc=True).limit(limit).execute())
-    rows=result.data or []; rows.reverse(); return rows
+    rows=result.data or []
+    rows.reverse()
+    return rows
 
 def _require_owner(business_id: str, authorization: str | None) -> dict:
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -64,8 +67,11 @@ def _require_owner(business_id: str, authorization: str | None) -> dict:
     token=authorization.split(" ",1)[1].strip()
     if not token: raise HTTPException(status_code=401, detail="Authentication required.")
     try:
-        user_result=supabase.auth.get_user(token); user=getattr(user_result,"user",None); user_id=getattr(user,"id",None)
-    except Exception: user_id=None
+        user_result=supabase.auth.get_user(token)
+        user=getattr(user_result,"user",None)
+        user_id=getattr(user,"id",None)
+    except Exception:
+        user_id=None
     if not user_id: raise HTTPException(status_code=401, detail="Invalid or expired session.")
     result=supabase.table("businesses").select("id,name,owner_id").eq("id",business_id).limit(1).execute()
     if not result.data: raise HTTPException(status_code=404, detail="Business not found.")
@@ -76,28 +82,30 @@ def _require_owner(business_id: str, authorization: str | None) -> dict:
 @app.post("/sales/reply")
 def sales_reply(request: SalesRequest, authorization: str | None = Header(default=None)):
     try:
-        business=_require_owner(request.business_id,authorization); business_name=business.get("name","the shop")
+        business=_require_owner(request.business_id,authorization)
+        business_name=business.get("name","the shop")
         customer_id=request.customer_id
         if customer_id:
             customer_result=(supabase.table("customers").select("id,name,phone").eq("id",customer_id).eq("business_id",request.business_id).limit(1).execute())
             if not customer_result.data: raise HTTPException(status_code=404, detail="Customer not found for this business.")
         else:
             customer_result=(supabase.table("customers").select("id,name,phone").eq("business_id",request.business_id).eq("name","Intelispark Test Customer").limit(1).execute())
-            if customer_result.data: customer_id=customer_result.data[0]["id"]
+            if customer_result.data:
+                customer_id=customer_result.data[0]["id"]
             else:
                 created=(supabase.table("customers").insert({"business_id":request.business_id,"name":"Intelispark Test Customer","phone":"+254700000000"}).execute())
                 if not created.data: raise RuntimeError("Could not create test customer.")
                 customer_id=created.data[0]["id"]
+
         conversation_result=(supabase.table("conversations").select("id").eq("business_id",request.business_id).eq("customer_id",customer_id).eq("channel","whatsapp").eq("status","open").limit(1).execute())
-        if conversation_result.data: conversation_id=conversation_result.data[0]["id"]
+        if conversation_result.data:
+            conversation_id=conversation_result.data[0]["id"]
         else:
             new_conversation=(supabase.table("conversations").insert({"business_id":request.business_id,"customer_id":customer_id,"channel":"whatsapp","status":"open"}).execute())
             if not new_conversation.data: raise RuntimeError("Could not create conversation.")
             conversation_id=new_conversation.data[0]["id"]
+
         context=_conversation_context(conversation_id)
-        # History retrieval is part of the optional agent path. If it fails, keep the
-        # existing local intelligence path alive instead of turning a customer message
-        # into a 500 response.
         history_rows=[]
         if agent_enabled():
             try:
@@ -105,154 +113,92 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
             except Exception as exc:
                 print(f"[Intelispark agent] history unavailable; using legacy fallback: {exc!r}")
                 history_rows=[]
+
         saved=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"customer","message_text":request.customer_message,"channel":"whatsapp"}).execute())
         if not saved.data: raise RuntimeError("Could not save customer message.")
+
         if agent_enabled():
-            # Tool-calling agent (feature-flagged). Returns None whenever it cannot give a grounded
-            # answer, in which case the legacy pipeline below answers exactly as before.
-            outcome = run_agent_turn(db=supabase, business=business, conversation_id=conversation_id, customer_id=customer_id,
-                                     customer_message=request.customer_message, history_rows=history_rows)
+            outcome = run_agent_turn(
+                db=supabase, business=business, conversation_id=conversation_id,
+                customer_id=customer_id, customer_message=request.customer_message,
+                history_rows=history_rows,
+            )
             if outcome is not None:
                 saved_ai=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"ai","message_text":outcome.reply,"channel":"whatsapp"}).execute())
                 if not saved_ai.data: raise RuntimeError("Could not save Intelispark response.")
-                now=datetime.now(timezone.utc).isoformat(); supabase.table("conversations").update({"last_message_at":now,"updated_at":now}).eq("id",conversation_id).execute()
+                now=datetime.now(timezone.utc).isoformat()
+                supabase.table("conversations").update({"last_message_at":now,"updated_at":now}).eq("id",conversation_id).execute()
                 return {"success": True, "conversation_id": conversation_id, "reply": outcome.reply, "intelligence": outcome.intelligence}
+
         local_analysis = engine.understand(request.customer_message, context)
         business_knowledge = engine.get_business_knowledge(request.business_id)
-
-        # Mistral is now the primary language interpreter. It sees the full
-        # shop catalog before Intelispark performs authoritative retrieval.
         catalog_result = (
             supabase.table("products")
             .select("id,name,brand,category,variant,condition,price,stock_quantity,description,specs,installment_available")
-            .eq("business_id", request.business_id)
-            .limit(200)
-            .execute()
+            .eq("business_id", request.business_id).limit(200).execute()
         )
         catalog_for_ai = catalog_result.data or []
         ai_guidance = None
         if mistral_assist.should_call(local_analysis, request.customer_message):
-            ai_guidance = mistral_assist.understand(
-                request.customer_message,
-                context,
-                business_knowledge,
-                catalog_for_ai,
-            )
+            ai_guidance = mistral_assist.understand(request.customer_message, context, business_knowledge, catalog_for_ai)
 
         search_message = request.customer_message
         analysis_for_reply = local_analysis
-        # Always initialize products before any Mistral branch. If Mistral is
-        # unavailable or not needed, Intelispark falls back to its local
-        # authoritative retrieval instead of leaving products undefined.
-        products = engine.retrieve_products(
-            request.business_id,
-            search_message,
-            context,
-            analysis_override=analysis_for_reply,
-        )
+        products = engine.retrieve_products(request.business_id, search_message, context, analysis_override=analysis_for_reply)
 
         if ai_guidance:
-            # Mistral is the primary language-understanding layer. It determines
-            # what the customer means; Intelispark still retrieves only verified
-            # products from this shop's Supabase catalog.
             guided_intent = str(ai_guidance.get("intent") or "").strip()
-            valid_intents = set(engine.intent_classes) | {
-                "identity", "owner_contact", "general", "thanks"
-            }
+            valid_intents = set(engine.intent_classes) | {"identity", "owner_contact", "general", "thanks"}
             analysis_for_reply = dict(local_analysis)
             if guided_intent in valid_intents:
                 analysis_for_reply["intent"] = guided_intent
-            analysis_for_reply["confidence"] = max(
-                float(local_analysis.get("confidence") or 0),
-                float(ai_guidance.get("confidence") or 0),
-            )
-
+            analysis_for_reply["confidence"] = max(float(local_analysis.get("confidence") or 0), float(ai_guidance.get("confidence") or 0))
             guided_entities = dict(local_analysis.get("entities") or {})
             product_type = ai_guidance.get("product_type")
             brand = str(ai_guidance.get("brand") or "").strip().lower()
             budget = ai_guidance.get("budget_max")
-            if product_type in {"phone", "laptop", "tablet", "camera", "audio", "accessory"}:
+            if product_type in {"phone","laptop","tablet","camera","audio","accessory"}:
                 guided_entities["product_type"] = product_type
             if brand:
                 guided_entities["brands"] = [brand]
             if budget is not None:
                 guided_entities["budget_max"] = budget
             analysis_for_reply["entities"] = guided_entities
-
             if ai_guidance.get("catalog_query") or ai_guidance.get("needs_catalog"):
-                search_message = str(
-                    ai_guidance.get("catalog_query") or request.customer_message
-                )
+                search_message = str(ai_guidance.get("catalog_query") or request.customer_message)
                 scope = str(ai_guidance.get("catalog_scope") or "").strip().lower()
                 if scope == "all":
-                    products = [
-                        p for p in catalog_for_ai
-                        if int(p.get("stock_quantity") or 0) > 0
-                    ]
+                    products=[p for p in catalog_for_ai if int(p.get("stock_quantity") or 0)>0]
                 else:
-                    products = engine.retrieve_products(
-                        request.business_id,
-                        search_message,
-                        context,
-                        analysis_override=analysis_for_reply,
-                    )
-
-            excluded = {
-                str(name).strip().lower()
-                for name in (ai_guidance.get("exclude_names") or [])
-                if str(name).strip()
-            }
+                    products=engine.retrieve_products(request.business_id, search_message, context, analysis_override=analysis_for_reply)
+            excluded={str(name).strip().lower() for name in (ai_guidance.get("exclude_names") or []) if str(name).strip()}
             if excluded:
-                products = [
-                    p for p in products
-                    if str(p.get("name") or "").strip().lower() not in excluded
-                    and int(p.get("stock_quantity") or 0) > 0
-                ]
+                products=[p for p in products if str(p.get("name") or "").strip().lower() not in excluded and int(p.get("stock_quantity") or 0)>0]
                 if not products:
-                    products = [
-                        p for p in catalog_for_ai
-                        if str(p.get("name") or "").strip().lower() not in excluded
-                        and int(p.get("stock_quantity") or 0) > 0
-                    ]
+                    products=[p for p in catalog_for_ai if str(p.get("name") or "").strip().lower() not in excluded and int(p.get("stock_quantity") or 0)>0]
 
         reply = engine.generate_reply(
-            message=request.customer_message,
-            products=products,
-            business_name=business_name,
-            context=context,
-            business=business_knowledge,
-            analysis_override=analysis_for_reply,
+            message=request.customer_message, products=products, business_name=business_name,
+            context=context, business=business_knowledge, analysis_override=analysis_for_reply,
         )
-
-        # Mistral may provide a conversational direct response when it does not
-        # require catalog facts. Catalog/business facts still come from Intelispark.
         if ai_guidance:
-            direct = str(ai_guidance.get("direct_reply") or "").strip()
-            intent = str(ai_guidance.get("intent") or "")
-            if direct and intent in {"identity", "owner_contact", "general"}:
-                reply = direct
+            direct=str(ai_guidance.get("direct_reply") or "").strip()
+            intent=str(ai_guidance.get("intent") or "")
+            if direct and intent in {"identity","owner_contact","general"}:
+                reply=direct
+
         saved_ai=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"ai","message_text":reply,"channel":"whatsapp"}).execute())
         if not saved_ai.data: raise RuntimeError("Could not save Intelispark response.")
-        now=datetime.now(timezone.utc).isoformat(); supabase.table("conversations").update({"last_message_at":now,"updated_at":now}).eq("id",conversation_id).execute()
-        analysis = engine.understand(request.customer_message, context)
-        analysis["mistral_assist"] = {
-            "used": bool(ai_guidance),
-            "model": mistral_assist.model if ai_guidance else None,
-        }
-        return {
-            "success": True,
-            "conversation_id": conversation_id,
-            "reply": reply,
-            "intelligence": {
-                **analysis,
-                "products_considered": len(products),
-                "model": "mistral-language-understanding + Intelispark-grounded-reasoning",
-            },
-        }
-    except HTTPException: raise
+        now=datetime.now(timezone.utc).isoformat()
+        supabase.table("conversations").update({"last_message_at":now,"updated_at":now}).eq("id",conversation_id).execute()
+        analysis=engine.understand(request.customer_message, context)
+        analysis["mistral_assist"]={"used":bool(ai_guidance),"model":mistral_assist.model if ai_guidance else None}
+        return {"success":True,"conversation_id":conversation_id,"reply":reply,"intelligence":{**analysis,"products_considered":len(products),"model":"mistral-language-understanding + Intelispark-grounded-reasoning"}}
+    except HTTPException:
+        raise
     except Exception as error:
         print(f"[Intelispark sales reply] {error!r}")
-        raise HTTPException(status_code=500,detail="Intelligence service error. Please try again.")
+        raise HTTPException(status_code=500, detail="Intelligence service error. Please try again.")
 
 app.add_api_route("/api/health",health,methods=["GET"])
 app.add_api_route("/api/ai/status",ai_status,methods=["GET"])
