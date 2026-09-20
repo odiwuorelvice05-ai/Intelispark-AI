@@ -7,6 +7,7 @@ customer language (English, Swahili, Sheng, mixed, typos) is the model's job.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 SYSTEM_TEMPLATE = """You are the WhatsApp sales assistant for "{shop_name}", a shop in Kenya. You talk to customers on the shop's behalf.
@@ -66,11 +67,11 @@ def catalog_snapshot(products: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _recent_product_references(products: list[dict[str, Any]], history: list[dict[str, Any]], state: dict[str, Any]) -> list[dict[str, Any]]:
-    recent_tokens = set(_tokens("\n".join(str(m.get("content") or "") for m in history[-12:])))
+    recent_tokens = set(re.findall(r"[a-z0-9]+", "\n".join(str(m.get("content") or "") for m in history[-12:]).lower()))
     state_ids = set(str(x) for x in (state.get("selected_product_ids") or []) + (state.get("candidate_product_ids") or []))
     scored: list[tuple[float, dict[str, Any]]] = []
     for product in products:
-        name_tokens = set(_tokens(str(product.get("name") or "")))
+        name_tokens = set(re.findall(r"[a-z0-9]+", str(product.get("name") or "").lower()))
         overlap = len(name_tokens & recent_tokens)
         state_bonus = 3 if str(product.get("id")) in state_ids else 0
         if overlap or state_bonus:
