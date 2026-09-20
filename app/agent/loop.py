@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from app.agent.grounding import check_reply
-from app.agent.prompt import build_system_prompt, catalog_snapshot, _recent_product_references
+from app.agent.prompt import build_system_prompt, catalog_snapshot, _recent_product_references, _request_product_hints
 from app.agent.providers.base import AIProvider, ProviderError
 from app.agent.tools import ToolContext, ToolRegistry, validate_args
 from app.agent.trace import AgentTrace
@@ -71,7 +71,14 @@ class AgentRunner:
         ctx.recent_history = history
         catalog = ctx.repo.list_products()
         recent_products = _recent_product_references(catalog, history, ctx.state)
-        system = build_system_prompt(shop_name, catalog_snapshot(catalog), ctx.state, recent_products=recent_products)
+        request_hints = _request_product_hints(catalog, customer_message)
+        system = build_system_prompt(
+            shop_name,
+            catalog_snapshot(catalog),
+            ctx.state,
+            recent_products=recent_products,
+            request_hints=request_hints,
+        )
         messages: list[dict[str, Any]] = [{"role": "system", "content": system}, *history, {"role": "user", "content": customer_message}]
         customer_texts = [m["content"] for m in history if m["role"] == "user"] + [customer_message]
         tools = self.registry.specs() + [FINAL_TOOL]
