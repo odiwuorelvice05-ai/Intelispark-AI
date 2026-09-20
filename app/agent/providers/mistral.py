@@ -1,4 +1,4 @@
-"""Mistral implementation of AIProvider (chat + native function calling)."""
+""""Mistral implementation of AIProvider (chat + native function calling)."""
 from __future__ import annotations
 
 import json
@@ -100,6 +100,8 @@ class MistralProvider(AIProvider):
             kwargs.update(tools=self._wire_tools(tools), tool_choice=tool_choice, parallel_tool_calls=False)
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        if self.reasoning_effort:
+            kwargs["reasoning_effort"] = self.reasoning_effort
         started = time.monotonic()
         try:
             resp = self._client.chat.complete(**kwargs)
