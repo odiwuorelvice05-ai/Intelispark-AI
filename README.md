@@ -120,3 +120,6 @@ Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the local environmen
 ### Development principle
 
 Build and test the system as a real multi-tenant commerce product: **WhatsApp is the customer interface, the dashboard is the shop-owner interface, Supabase Database is the structured business knowledge/data layer, Supabase Storage is the business media layer, and Intelispark AI is the intelligence layer connecting them.**
+
+
+<!-- Production rollback marker: preserved last known-good application code. -->
