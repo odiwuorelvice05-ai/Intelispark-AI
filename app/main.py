@@ -95,7 +95,16 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
             if not new_conversation.data: raise RuntimeError("Could not create conversation.")
             conversation_id=new_conversation.data[0]["id"]
         context=_conversation_context(conversation_id)
-        history_rows=_history_rows(conversation_id) if agent_enabled() else []
+        # History retrieval is part of the optional agent path. If it fails, keep the
+        # existing local intelligence path alive instead of turning a customer message
+        # into a 500 response.
+        history_rows=[]
+        if agent_enabled():
+            try:
+                history_rows=_history_rows(conversation_id)
+            except Exception as exc:
+                print(f"[Intelispark agent] history unavailable; using legacy fallback: {exc!r}")
+                history_rows=[]
         saved=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"customer","message_text":request.customer_message,"channel":"whatsapp"}).execute())
         if not saved.data: raise RuntimeError("Could not save customer message.")
         if agent_enabled():
