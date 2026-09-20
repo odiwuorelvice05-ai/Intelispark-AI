@@ -1,0 +1,34 @@
+name: Transfer verified intelligence branch
+
+on:
+  push:
+    branches:
+      - transfer/intelligence-bundle
+
+permissions:
+  contents: write
+
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import exact verified intelligence ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="intelispark-intelligence-reset.bundle"
+          EXPECTED="3b91ed54d0ffb5dbbc51b08370268f10127ea162"
+
+          test -f "$BUNDLE"
+          git fetch "./$BUNDLE" "refactor/intelligence-reset:refs/heads/refactor/intelligence-reset"
+          ACTUAL="$(git rev-parse refs/heads/refactor/intelligence-reset)"
+
+          test "$ACTUAL" = "$EXPECTED"
+
+          git push origin "refs/heads/refactor/intelligence-reset:refs/heads/refactor/intelligence-reset"
+          echo "Transferred exact commit: $ACTUAL"
