@@ -45,6 +45,7 @@ class ToolContext:
     conversation_id: str
     customer_id: str | None = None
     state: dict[str, Any] = field(default_factory=dict)
+    recent_history: list[dict[str, Any]] = field(default_factory=list)
     evidence: Evidence = field(default_factory=Evidence)
     security_events: list[str] = field(default_factory=list)
 
@@ -197,6 +198,67 @@ def _fuzzy_in(tok: str, toks: set[str]) -> bool:
 def _term_matches(term: str, toks: set[str]) -> bool:
     parts = _tokens(term)
     return bool(parts) and all(_fuzzy_in(pt, toks) for pt in parts)
+
+
+def _reference_candidates(ctx: ToolContext, reference: str, limit: int = 5) -> list[dict[str, Any]]:
+    """Resolve a natural-language product reference against this shop's catalog and recent turns."""
+    ref_tokens = set(_tokens(reference))
+    if not ref_tokens:
+        return []
+    products = ctx.repo.list_products()
+    recent_tokens = set(_tokens("\n".join(str(m.get("content") or "") for m in ctx.recent_history[-12:])))
+    state_ids = set(str(x) for x in (ctx.state.get("selected_product_ids") or []) + (ctx.state.get("candidate_product_ids") or []))
+    ranked: list[tuple[float, dict[str, Any]]] = []
+    for product in products:
+        name_tokens = _name_tokens(product)
+        exact = len(ref_tokens & name_tokens)
+        fuzzy = sum(1 for token in ref_tokens if any(_fuzzy_in(token, nt) for nt in name_tokens))
+        recent = len(name_tokens & recent_tokens)
+        state_bonus = 3.0 if str(product.get("id")) in state_ids else 0.0
+        score = 3.0 * exact + 1.5 * fuzzy + recent + state_bonus
+        if score > 0:
+            ranked.append((score, product))
+    ranked.sort(key=lambda item: (-item[0], str(item[1].get("name") or "")))
+    return [compact_product(product, full=True) for _, product in ranked[:limit]]
+
+
+def _resolve_product_reference(ctx: ToolContext, a: dict[str, Any]) -> dict[str, Any]:
+    matches = _reference_candidates(ctx, a["reference"], limit=5)
+    if not matches:
+        return {
+            "resolved": False,
+            "reference": a["reference"],
+            "matches": [],
+            "note": "No product in this shop could be confidently linked to that reference. Ask one brief clarification question."
+        }
+    ctx.evidence.add_products(matches)
+    return {
+        "resolved": True,
+        "reference": a["reference"],
+        "matches": matches,
+        "note": "Use the strongest match only when the conversation clearly identifies it; otherwise ask for clarification."
+    }
+
+
+def _list_catalog(ctx: ToolContext, a: dict[str, Any]) -> dict[str, Any]:
+    products = ctx.repo.list_products()
+    if a.get("in_stock_only", True):
+        products = [p for p in products if int(_num(p.get("stock_quantity")) or 0) > 0]
+    if a.get("category"):
+        products = [p for p in products if _term_matches(a["category"], _name_tokens(p))]
+    if a.get("brand"):
+        brand = a["brand"].lower()
+        products = [p for p in products if brand in str(p.get("brand") or "").lower() or brand in str(p.get("name") or "").lower()]
+    products.sort(key=lambda p: str(p.get("name") or "").lower())
+    limit = a.get("limit", 30)
+    items = [compact_product(p) for p in products[:limit]]
+    ctx.evidence.add_products(items)
+    return {
+        "in_stock_only": a.get("in_stock_only", True),
+        "total": len(products),
+        "products": items,
+        "truncated": len(products) > limit,
+    }
 
 
 def _apply_filters(products: list[dict[str, Any]], f: dict[str, Any]) -> list[dict[str, Any]]:
@@ -384,6 +446,9 @@ def _obj(props: dict[str, Any], required: list[str] | None = None) -> dict[str, 
 
 def default_tools() -> list[Tool]:
     return [
+        Tool("resolve_product_reference",
+             "Resolve references such as 'the calculator', 'that Samsung', 'the first one', or 'the cheaper one' using recent conversation and THIS shop's catalog. Use this before answering a product follow-up.",
+             _obj({"reference": {"type": "string", "maxLength": 160}}, ["reference"]), _resolve_product_reference),
         Tool("search_products",
              "Search THIS shop's catalog. Map the customer's request to structured filters yourself (in any language). "
              "Returns real records with price_kes and stock_quantity; these are the only source of price/stock/spec facts.",
@@ -401,6 +466,14 @@ def default_tools() -> list[Tool]:
              }), _search_products),
         Tool("get_product", "Fetch the full, current record (all specs, price, stock) for one product id. Use it to verify facts before quoting them.",
              _obj({"product_id": {"type": "string"}}, ["product_id"]), _get_product),
+        Tool("list_catalog",
+             "List the shop's current catalog. Use for requests such as 'what products do you have in stock?' so the answer reflects the real catalog.",
+             _obj({
+                 "category": {"type": "string"},
+                 "brand": {"type": "string"},
+                 "in_stock_only": {"type": "boolean", "description": "Default true."},
+                 "limit": {"type": "integer", "minimum": 1, "maximum": 30}
+             }), _list_catalog),
         Tool("compare_products", "Compare 2-4 products of this shop side by side.",
              _obj({"product_ids": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4}}, ["product_ids"]), _compare_products),
         Tool("get_business_information", "Shop name, contact numbers, timezone and the owner's profile text.", _obj({}), _business_information),
