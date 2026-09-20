@@ -97,11 +97,9 @@ class MistralProvider(AIProvider):
             temperature=temperature, max_tokens=max_tokens, timeout_ms=int(timeout_s * 1000),
         )
         if tools:
-            kwargs.update(tools=self._wire_tools(tools), tool_choice=tool_choice, parallel_tool_calls=True)
+            kwargs.update(tools=self._wire_tools(tools), tool_choice=tool_choice, parallel_tool_calls=False)
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
-        if self.reasoning_effort:
-            kwargs["reasoning_effort"] = self.reasoning_effort
         started = time.monotonic()
         try:
             resp = self._client.chat.complete(**kwargs)
