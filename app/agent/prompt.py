@@ -41,6 +41,7 @@ FINISHING
 
 SHOP SNAPSHOT (facts about the catalog's shape, not product facts to quote): {snapshot}
 RECENT PRODUCT REFERENCES (deterministic hints from recent conversation; still re-check with tools): {recent_products}
+CURRENT REQUEST RETRIEVAL HINTS (candidate records found before the model acts; verify with tools before quoting facts): {request_hints}
 CONVERSATION STATE: {state}"""
 
 
@@ -85,11 +86,32 @@ def _recent_product_references(products: list[dict[str, Any]], history: list[dic
     return [item for _, item in scored[:8]]
 
 
+def _request_product_hints(products: list[dict[str, Any]], request: str, limit: int = 6) -> list[dict[str, Any]]:
+    query_tokens = set(re.findall(r"[a-z0-9]+", request.lower()))
+    if not query_tokens:
+        return []
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for product in products:
+        name = str(product.get("name") or "")
+        brand = str(product.get("brand") or "")
+        category = str(product.get("category") or "")
+        name_tokens = set(re.findall(r"[a-z0-9]+", f"{name} {brand} {category}".lower()))
+        exact = len(query_tokens & name_tokens)
+        fuzzy = sum(1 for token in query_tokens if len(token) >= 3 and any(token in nt or nt in token or (len(nt) >= 4 and re.sub(r'[^a-z0-9]', '', token) == nt) for nt in name_tokens))
+        if exact or fuzzy:
+            score = exact * 3.0 + fuzzy
+            scored.append((score, {"id": str(product.get("id")), "name": name, "brand": brand, "category": category, "match_strength": round(score, 2)}))
+    scored.sort(key=lambda item: (-item[0], str(item[1]["name"]).lower()))
+    return [item for _, item in scored[:limit]]
+
+
 def build_system_prompt(shop_name: str, snapshot: dict[str, Any], state: dict[str, Any],
-                        recent_products: list[dict[str, Any]] | None = None) -> str:
+                        recent_products: list[dict[str, Any]] | None = None,
+                        request_hints: list[dict[str, Any]] | None = None) -> str:
     return SYSTEM_TEMPLATE.format(
         shop_name=(shop_name or "the shop").replace('"', "'")[:80],
         snapshot=json.dumps(snapshot, ensure_ascii=False),
         recent_products=json.dumps(recent_products or [], ensure_ascii=False),
+        request_hints=json.dumps(request_hints or [], ensure_ascii=False),
         state=json.dumps(state, ensure_ascii=False) if state else "none yet",
     )
