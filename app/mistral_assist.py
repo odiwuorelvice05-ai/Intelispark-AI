@@ -23,12 +23,12 @@ def _describe_error(exc: Exception) -> str:
     Never includes the request payload, the API key or any token. Redaction runs on the full text
     BEFORE truncation so a key cannot survive as a fragment.
     """
-    text = re.sub(r"\\s+", " ", f"{exc} {getattr(exc, 'body', '') or ''}")
+    text = re.sub(r"\s+", " ", f"{exc} {getattr(exc, 'body', '') or ''}")
     key = os.getenv("MISTRAL_API_KEY", "").strip()
     if key:
         text = text.replace(key, "[redacted]")
-    text = re.sub(r"(?i)bearer\\s+[A-Za-z0-9._~+/=-]+", "Bearer [redacted]", text)
-    text = re.sub(r"eyJ[A-Za-z0-9_-]{8,}(?:\\.[A-Za-z0-9_-]+){0,2}", "[jwt]", text)
+    text = re.sub(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+", "Bearer [redacted]", text)
+    text = re.sub(r"eyJ[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]+){0,2}", "[jwt]", text)
     return (f"{type(exc).__name__} status={getattr(exc, 'status_code', None)} "
             f"reasoning_effort_in_error={'reasoning_effort' in text} detail={text[:200]!r}")
 
