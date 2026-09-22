@@ -21,7 +21,13 @@ class IntelisparkEngine:
         "laptop": ("laptop", "notebook", "macbook", "thinkpad", "ideapad", "pavilion", "latitude", "elitebook"),
         "tablet": ("tablet", "ipad"),
         "camera": ("camera", "dslr", "mirrorless", "canon", "nikon", "sony alpha"),
-        "accessory": ("charger", "cable", "earphones", "earbuds", "headphones", "power bank", "case", "cover", "mouse", "keyboard", "adapter"),
+        "charger": ("charger", "power adapter", "adapter"),
+        "cable": ("cable",),
+        "headphones": ("earphones", "earbuds", "headphones", "headset"),
+        "power_bank": ("power bank", "powerbank"),
+        "case": ("case", "cover"),
+        "mouse": ("mouse",),
+        "keyboard": ("keyboard",),
     }
     PRIORITIES = {
         "camera": ("camera", "photo", "selfie"),
@@ -137,6 +143,12 @@ class IntelisparkEngine:
             typed = [(score, p) for score, p in ranked if any(re.search(rf"\b{re.escape(w)}\b", " ".join(str(p.get(k) or "") for k in ("name","brand","category","variant","description","specs")).lower()) for w in words)]
             if typed:
                 filtered = typed
+            else:
+                # The customer asked for a specific product type and nothing in
+                # the catalog matches it — say so honestly instead of falling
+                # back to unrelated products (e.g. a charger when they asked
+                # for a keyboard).
+                return []
         if e.get("budget_max") is not None:
             within_budget = [(score, p) for score, p in filtered if self._number(p.get("price")) <= e["budget_max"]]
             if within_budget:
@@ -145,6 +157,27 @@ class IntelisparkEngine:
                 return []
         positive = [p for score, p in filtered if score > 0]
         return [p for score, p in filtered[:5]] if not positive else positive[:5]
+
+    @staticmethod
+    def _extract_field(description: str, keywords: tuple[str, ...]) -> list[str]:
+        """Pull meaningful lines from the business description that mention any
+        of the given keywords, skipping label-only lines with no real value
+        (e.g. an unfilled "Location:" placeholder left over from onboarding)."""
+        if not keywords:
+            return []
+        chunks = [x.strip() for x in re.split(r"[\n.;]+", description) if x.strip()]
+        found: list[str] = []
+        for chunk in chunks:
+            if not any(k in chunk.lower() for k in keywords):
+                continue
+            label, sep, value = chunk.partition(":")
+            value = value.strip() if sep else chunk
+            # Skip lines that are just the field label with no real content,
+            # e.g. a bare "Location" or "Location:" with nothing after it.
+            if not value or value.strip(":").strip().lower() in keywords:
+                continue
+            found.append(value)
+        return found
 
     def generate_reply(self, message: str, products: list[dict[str, Any]], business_name: str = "the shop", context: str = "", business: dict[str, Any] | None = None, analysis_override: dict[str, Any] | None = None) -> str:
         a = analysis_override or self.understand(message, context)
@@ -180,6 +213,26 @@ class IntelisparkEngine:
         ):
             return "You're talking to Intelispark AI, the sales intelligence assistant for this shop."
 
+        # Small talk has no training examples in the intent classifier, so it
+        # otherwise gets force-classified into an unrelated intent (usually
+        # business_info) and answered with a confusing, irrelevant reply.
+        if any(phrase in normalized_message for phrase in (
+            "how are you", "how's it going", "hows it going", "how you doing",
+            "what's up", "whats up", "good morning", "good afternoon", "good evening",
+        )):
+            return f"I'm doing well, thanks for asking! I'm {business_name}'s sales assistant — happy to help you find a product, check prices or stock, or answer questions about the shop. What are you looking for today?"
+
+        # A customer saying the bot isn't understanding them is also missing
+        # from training data and was landing in the same wrong bucket. Treat
+        # it as its own case: acknowledge and ask them to restate plainly,
+        # rather than answering with an unrelated business-profile message.
+        if any(phrase in normalized_message for phrase in (
+            "not understanding", "don't understand", "dont understand", "not getting it",
+            "doesn't make sense", "not what i asked", "you are not even", "you're not even",
+            "not helpful", "makes no sense",
+        )):
+            return "Sorry about that — let me try again. Could you tell me plainly what you're looking for (a product, a price, or something about the shop), and I'll get it right this time?"
+
         if intent == "business_info":
             if description:
                 q = message.lower()
@@ -191,7 +244,14 @@ class IntelisparkEngine:
                     "contact": ("contact", "phone number", "call"),
                 }
                 wanted = next((terms for key, terms in groups.items() if any(x in q for x in terms)), ())
-                relevant = [x.strip() for x in re.split(r"[\n.;]+", description) if any(k in x.lower() for k in wanted)]
+                if not wanted:
+                    # The classifier defaulted to business_info but the question
+                    # doesn't actually match any known business-info topic — it's
+                    # likely off-topic entirely (e.g. a general tech question).
+                    # Saying "not in the business profile" here would be
+                    # misleading, since this was never profile material.
+                    return f"That's a bit outside what I can help with directly as {business_name}'s sales assistant, but I'm happy to help with product questions, pricing, stock, or shop details. What would you like to know?"
+                relevant = self._extract_field(description, wanted)
                 if relevant:
                     return "Here is the business information from the shop profile: " + " ".join(relevant[:4])
             if any(x in message.lower() for x in ("contact", "phone number", "call")) and (business.get("phone") or business.get("whatsapp_number")):
@@ -200,7 +260,7 @@ class IntelisparkEngine:
 
         if intent == "location":
             if description:
-                relevant = [x.strip() for x in re.split(r"[\n.;]+", description) if any(k in x.lower() for k in ("location","address","located","shop","branch","pickup","collect"))]
+                relevant = self._extract_field(description, ("location","address","located","branch","pickup","collect"))
                 if relevant:
                     return "Here is the shop information from its business profile: " + " ".join(relevant[:3])
             if business.get("phone") or business.get("whatsapp_number"):
@@ -208,7 +268,7 @@ class IntelisparkEngine:
             return "I don't have a full shop address in the business profile yet, so I don't want to invent one. The owner can add it to Business knowledge in Settings."
         if intent == "delivery":
             if description:
-                relevant = [x.strip() for x in re.split(r"[\n.;]+", description) if any(k in x.lower() for k in ("delivery","deliver","shipping","courier","fee"))]
+                relevant = self._extract_field(description, ("delivery","deliver","shipping","courier","fee"))
                 if relevant:
                     return "Here is the delivery information from the business profile: " + " ".join(relevant[:3])
             return "I don't see a delivery policy or fee in the business profile yet. The shop owner can add those details to Business knowledge in Settings."
