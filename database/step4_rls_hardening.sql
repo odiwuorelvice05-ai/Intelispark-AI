@@ -1,135 +1,208 @@
--- Intelispark AI — RLS hardening for tenant isolation (Task 3 of the intelligence-layer reset).
--- Run once in the Supabase SQL editor. Read the whole comment block before running it.
+-- Intelispark AI — canonical tenant RLS reconciliation.
+-- Replaces the duplicated/stale permissive policy set with one consistent
+-- owner-or-explicit-user-membership model.
 --
--- WHY THIS MATTERS
--- The Python backend (app/agent/*, app/main.py) already enforces tenant isolation entirely in
--- application code, and it always connects with the Supabase SERVICE-ROLE key, which bypasses
--- RLS by design (Supabase's service_role Postgres role has BYPASSRLS). This migration changes
--- NOTHING about that path -- it will keep working exactly as it does today.
+-- IMPORTANT:
+-- * This migration does not delete data or change table structure.
+-- * The Python backend uses service_role and is intentionally unaffected.
+-- * The browser uses the authenticated user's session, so these policies are
+--   the security boundary for direct Supabase access.
+-- * Existing ownerless demo/test businesses remain inaccessible to browser
+--   users unless they are later assigned an owner/member. service_role access
+--   remains available to the backend.
 --
--- The DASHBOARD, however, talks to Supabase DIRECTLY from the browser using the anon key plus
--- the signed-in user's own session (see APP.supabase.from(...) calls in frontend/script.js,
--- onboarding.js, conversation-ui.js, product-delete.js). Every one of those calls currently
--- relies on a client-side .eq('business_id', ...) / .eq('owner_id', ...) filter for isolation --
--- that is NOT a security boundary. Any authenticated user can open devtools and query these
--- tables directly with no filter, or with a different business_id, and get another shop's data.
--- database/step3_account_ownership.sql says outright that RLS was never enabled here. If that
--- still matches production, this is the one real gap that lets a signed-in shop owner read or
--- write another shop's products, customers, conversations and messages.
+-- Access model:
+--   owner = businesses.owner_id = auth.uid()
+--   member = business_members.user_id = auth.uid()
 --
--- WHAT THIS DOES
--- Enables RLS on the five tables the dashboard queries directly (businesses, products,
--- customers, conversations, messages), with policies that allow exactly the operations the
--- current frontend performs -- nothing more, nothing less -- scoped to owner_id = auth.uid()
--- on businesses, and via a join back to businesses for every table that only carries
--- business_id (or, for messages, only conversation_id).
---
--- WHAT THIS DOES NOT DO
--- Touch table structure, drop or rename a single column, delete a single row, reset any table,
--- or change how the Python backend talks to Supabase.
---
--- BEFORE RUNNING IN PRODUCTION
---   1. businesses/customers/conversations/messages have no schema file checked into this repo
---      (unlike products -- see step2_products.sql), so the column names below (owner_id,
---      business_id, conversation_id) are inferred from every query site in frontend/*.js and
---      app/*.py. Confirm they match the Supabase Table Editor before running this.
---   2. Run this in a staging/dev project first, or wrapped in a transaction you can roll back
---      (it already is, below), then click through the dashboard end-to-end -- sign in, view
---      products, add/edit/delete a product, edit business info, open a conversation, delete
---      a conversation -- before trusting it in production. Enabling RLS with a missing policy
---      denies that operation outright rather than raising a loud error, so a gap here reads as
---      "nothing loads", not a clear failure.
---   3. Independent of database/proposed/agent_phase2.sql (escalations/agent_state) -- run this
---      whether or not that one has been applied. Once escalations exists, give it the same
---      treatment (a starting policy is already sketched in that file's own comment).
---
+-- Email-only membership is deliberately NOT treated as authorization. An
+-- invitation should be linked to a real auth user before that user gets access.
+
 begin;
 
--- ── businesses ───────────────────────────────────────────────────────────
-alter table public.businesses enable row level security;
+-- Remove all previously-defined policy families so permissive policies cannot
+-- silently widen access through OR semantics.
 
+drop policy if exists businesses_select_own_or_member on public.businesses;
 drop policy if exists businesses_select_own on public.businesses;
-create policy businesses_select_own on public.businesses
-  for select to authenticated
-  using (owner_id = auth.uid());
-
+drop policy if exists businesses_insert_self_owned on public.businesses;
 drop policy if exists businesses_insert_own on public.businesses;
-create policy businesses_insert_own on public.businesses
-  for insert to authenticated
-  with check (owner_id = auth.uid());
-
+drop policy if exists businesses_update_owner_only on public.businesses;
 drop policy if exists businesses_update_own on public.businesses;
-create policy businesses_update_own on public.businesses
-  for update to authenticated
-  using (owner_id = auth.uid())
-  with check (owner_id = auth.uid());
+drop policy if exists businesses_delete_owner_only on public.businesses;
 
--- No delete policy: the dashboard has no "delete business" action today.
--- Omitting the policy denies the operation outright -- matches current behaviour.
+drop policy if exists members_select_same_business on public.business_members;
+drop policy if exists members_insert_owner on public.business_members;
+drop policy if exists members_update_owner on public.business_members;
+drop policy if exists members_delete_owner on public.business_members;
 
--- ── products ─────────────────────────────────────────────────────────────
-alter table public.products enable row level security;
-
+drop policy if exists products_select_same_business on public.products;
+drop policy if exists products_select_tenant on public.products;
 drop policy if exists products_select_own on public.products;
-create policy products_select_own on public.products
-  for select to authenticated
-  using (exists (select 1 from public.businesses b where b.id = products.business_id and b.owner_id = auth.uid()));
-
+drop policy if exists products_insert_same_business on public.products;
+drop policy if exists products_insert_tenant on public.products;
 drop policy if exists products_insert_own on public.products;
-create policy products_insert_own on public.products
-  for insert to authenticated
-  with check (exists (select 1 from public.businesses b where b.id = products.business_id and b.owner_id = auth.uid()));
-
+drop policy if exists products_update_same_business on public.products;
+drop policy if exists products_update_tenant on public.products;
 drop policy if exists products_update_own on public.products;
-create policy products_update_own on public.products
-  for update to authenticated
-  using (exists (select 1 from public.businesses b where b.id = products.business_id and b.owner_id = auth.uid()))
-  with check (exists (select 1 from public.businesses b where b.id = products.business_id and b.owner_id = auth.uid()));
-
+drop policy if exists products_delete_same_business on public.products;
+drop policy if exists products_delete_tenant on public.products;
 drop policy if exists products_delete_own on public.products;
-create policy products_delete_own on public.products
-  for delete to authenticated
-  using (exists (select 1 from public.businesses b where b.id = products.business_id and b.owner_id = auth.uid()));
 
--- ── customers ────────────────────────────────────────────────────────────
--- The dashboard only ever reads customers directly; creation happens through the backend
--- (service-role key) when a WhatsApp/test conversation starts. Only a select policy is added,
--- matching current behaviour -- insert/update/delete stay denied on the anon-key path.
-alter table public.customers enable row level security;
-
+drop policy if exists customers_select_same_business on public.customers;
+drop policy if exists customers_select_tenant on public.customers;
 drop policy if exists customers_select_own on public.customers;
-create policy customers_select_own on public.customers
-  for select to authenticated
-  using (exists (select 1 from public.businesses b where b.id = customers.business_id and b.owner_id = auth.uid()));
+drop policy if exists customers_insert_same_business on public.customers;
+drop policy if exists customers_insert_tenant on public.customers;
+drop policy if exists customers_insert_own on public.customers;
+drop policy if exists customers_update_same_business on public.customers;
+drop policy if exists customers_update_tenant on public.customers;
+drop policy if exists customers_update_own on public.customers;
+drop policy if exists customers_delete_same_business on public.customers;
+drop policy if exists customers_delete_tenant on public.customers;
+drop policy if exists customers_delete_own on public.customers;
 
--- ── conversations ────────────────────────────────────────────────────────
-alter table public.conversations enable row level security;
-
+drop policy if exists conversations_select_same_business on public.conversations;
+drop policy if exists conversations_select_tenant on public.conversations;
 drop policy if exists conversations_select_own on public.conversations;
-create policy conversations_select_own on public.conversations
-  for select to authenticated
-  using (exists (select 1 from public.businesses b where b.id = conversations.business_id and b.owner_id = auth.uid()));
-
+drop policy if exists conversations_insert_same_business on public.conversations;
+drop policy if exists conversations_insert_tenant on public.conversations;
+drop policy if exists conversations_insert_own on public.conversations;
+drop policy if exists conversations_update_same_business on public.conversations;
+drop policy if exists conversations_update_tenant on public.conversations;
+drop policy if exists conversations_update_own on public.conversations;
+drop policy if exists conversations_delete_same_business on public.conversations;
+drop policy if exists conversations_delete_tenant on public.conversations;
 drop policy if exists conversations_delete_own on public.conversations;
-create policy conversations_delete_own on public.conversations
-  for delete to authenticated
-  using (exists (select 1 from public.businesses b where b.id = conversations.business_id and b.owner_id = auth.uid()));
 
--- No insert/update policy: conversations are only ever created/updated by the backend.
-
--- ── messages ─────────────────────────────────────────────────────────────
--- messages carries only conversation_id, not business_id -- ownership is checked by joining
--- through conversations -> businesses. Read-only from the dashboard; all writes come from the
--- backend (service-role key).
-alter table public.messages enable row level security;
-
+drop policy if exists messages_select_same_business on public.messages;
+drop policy if exists messages_select_tenant on public.messages;
 drop policy if exists messages_select_own on public.messages;
-create policy messages_select_own on public.messages
-  for select to authenticated
-  using (exists (
-    select 1 from public.conversations c
-    join public.businesses b on b.id = c.business_id
-    where c.id = messages.conversation_id and b.owner_id = auth.uid()
-  ));
+drop policy if exists messages_insert_same_business on public.messages;
+drop policy if exists messages_insert_tenant on public.messages;
+drop policy if exists messages_insert_own on public.messages;
+drop policy if exists messages_update_same_business on public.messages;
+drop policy if exists messages_update_tenant on public.messages;
+drop policy if exists messages_update_own on public.messages;
+drop policy if exists messages_delete_same_business on public.messages;
+drop policy if exists messages_delete_tenant on public.messages;
+drop policy if exists messages_delete_own on public.messages;
+
+drop policy if exists appointments_select_same_business on public.appointments;
+drop policy if exists appointments_select_tenant on public.appointments;
+drop policy if exists appointments_insert_same_business on public.appointments;
+drop policy if exists appointments_insert_tenant on public.appointments;
+drop policy if exists appointments_update_same_business on public.appointments;
+drop policy if exists appointments_update_tenant on public.appointments;
+drop policy if exists appointments_delete_same_business on public.appointments;
+drop policy if exists appointments_delete_tenant on public.appointments;
+
+alter table public.businesses enable row level security;
+alter table public.business_members enable row level security;
+alter table public.products enable row level security;
+alter table public.customers enable row level security;
+alter table public.conversations enable row level security;
+alter table public.messages enable row level security;
+alter table public.appointments enable row level security;
+
+create policy businesses_select_owner_or_member
+on public.businesses for select to authenticated
+using (private.is_business_user(id));
+
+create policy businesses_insert_owner
+on public.businesses for insert to authenticated
+with check (owner_id = auth.uid());
+
+create policy businesses_update_owner
+on public.businesses for update to authenticated
+using (owner_id = auth.uid())
+with check (owner_id = auth.uid());
+
+create policy businesses_delete_owner
+on public.businesses for delete to authenticated
+using (owner_id = auth.uid());
+
+create policy members_select_business_user
+on public.business_members for select to authenticated
+using (private.is_business_user(business_id));
+
+create policy members_insert_owner
+on public.business_members for insert to authenticated
+with check (exists (
+  select 1 from public.businesses b
+  where b.id = business_members.business_id and b.owner_id = auth.uid()
+));
+
+create policy members_update_owner
+on public.business_members for update to authenticated
+using (exists (
+  select 1 from public.businesses b
+  where b.id = business_members.business_id and b.owner_id = auth.uid()
+))
+with check (exists (
+  select 1 from public.businesses b
+  where b.id = business_members.business_id and b.owner_id = auth.uid()
+));
+
+create policy members_delete_owner
+on public.business_members for delete to authenticated
+using (exists (
+  select 1 from public.businesses b
+  where b.id = business_members.business_id and b.owner_id = auth.uid()
+));
+
+create policy products_select_business_user
+on public.products for select to authenticated
+using (private.is_business_user(business_id));
+
+create policy products_insert_business_user
+on public.products for insert to authenticated
+with check (private.is_business_user(business_id));
+
+create policy products_update_business_user
+on public.products for update to authenticated
+using (private.is_business_user(business_id))
+with check (private.is_business_user(business_id));
+
+create policy products_delete_business_user
+on public.products for delete to authenticated
+using (private.is_business_user(business_id));
+
+create policy customers_select_business_user
+on public.customers for select to authenticated
+using (private.is_business_user(business_id));
+
+create policy conversations_select_business_user
+on public.conversations for select to authenticated
+using (private.is_business_user(business_id));
+
+create policy conversations_delete_business_user
+on public.conversations for delete to authenticated
+using (private.is_business_user(business_id));
+
+create policy messages_select_business_user
+on public.messages for select to authenticated
+using (exists (
+  select 1 from public.conversations c
+  where c.id = messages.conversation_id
+    and private.is_business_user(c.business_id)
+));
+
+create policy appointments_select_business_user
+on public.appointments for select to authenticated
+using (private.is_business_user(business_id));
+
+create policy appointments_insert_business_user
+on public.appointments for insert to authenticated
+with check (private.is_business_user(business_id));
+
+create policy appointments_update_business_user
+on public.appointments for update to authenticated
+using (private.is_business_user(business_id))
+with check (private.is_business_user(business_id));
+
+create policy appointments_delete_business_user
+on public.appointments for delete to authenticated
+using (private.is_business_user(business_id));
 
 commit;
