@@ -130,19 +130,10 @@ def sales_reply(request: SalesRequest, authorization: str | None = Header(defaul
         if reply is None:
             reply, intelligence = _safe_fallback_reply(business["id"], business_name, conversation_id, customer_id, request.customer_message)
 
-        saved_ai=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"ai","message_text":outcome.reply,"channel":"whatsapp"}).execute())
-                if not saved_ai.data: raise RuntimeError("Could not save Intelispark response.")
-                now=datetime.now(timezone.utc).isoformat()
-                supabase.table("conversations").update({"last_message_at":now,"updated_at":now}).eq("id",conversation_id).execute()
-                return {"success": True, "conversation_id": conversation_id, "reply": outcome.reply, "intelligence": outcome.intelligence}
-
-        if reply is None:
-            reply, intelligence = _safe_fallback_reply(business["id"], business_name, conversation_id, customer_id, request.customer_message)
-
         saved_ai=(supabase.table("messages").insert({"conversation_id":conversation_id,"sender_type":"ai","message_text":reply,"channel":"whatsapp"}).execute())
         if not saved_ai.data: raise RuntimeError("Could not save Intelispark response.")
         now=datetime.now(timezone.utc).isoformat()
-        supabase.table("conversations").update({"last_message_at":now,"updated_at":now}).eq("id",conversation_id).execute()
+        supabase.table("conversations").update({"last_message_at":now,"updated_at":now}).execute()
         return {"success": True, "conversation_id": conversation_id, "reply": reply, "intelligence": intelligence}
     except HTTPException:
         raise
