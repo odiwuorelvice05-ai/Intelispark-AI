@@ -9,5 +9,6 @@ create index if not exists businesses_owner_id_idx
 
 -- Existing mock/test businesses can remain ownerless. New authenticated
 -- workspaces created by the frontend always receive the signed-in user's id.
--- RLS policies are intentionally not enabled here because the existing
--- product/customer policies should be audited together before production use.
+-- RLS hardening for this and every other tenant-scoped table the dashboard
+-- queries directly now lives in database/step4_rls_hardening.sql -- run it
+-- (after reading its own review notes) before trusting this in production.

@@ -1,6 +1,7 @@
 """End-to-end through the real FastAPI route with a fake Supabase and a scripted model.
 Proves the wiring: auth -> tenant -> agent -> tools -> grounded reply -> persisted messages,
-and that any agent failure falls back to the untouched legacy engine."""
+and that any agent failure or disablement falls back to a safe template + a recorded handoff
+(never to a second, un-grounded intelligence engine)."""
 import os
 
 os.environ.setdefault("SUPABASE_URL", "https://abc.supabase.co")
@@ -10,7 +11,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.agent.service as service
-import app.brain_v03 as brain
 import app.main as main
 from app.agent.providers.base import ProviderError
 from tests.agent.fake_supabase import FakeSupabase
@@ -24,9 +24,7 @@ def env(monkeypatch):
     db.tables["businesses"] = [{"id": SHOP_A, "owner_id": "owner-1", **BUSINESS_A}, {"id": SHOP_B, "owner_id": "owner-2", **BUSINESS_B}]
     db.tables["products"] = [{"business_id": SHOP_A, **p} for p in PRODUCTS_A] + [{"business_id": SHOP_B, **p} for p in PRODUCTS_B]
     monkeypatch.setattr(main, "supabase", db)
-    monkeypatch.setattr(brain, "supabase", db)
     monkeypatch.setattr(service.settings, "agent_mode", "on")
-    monkeypatch.setattr(main.mistral_assist, "enabled", False, raising=False)
     return db, TestClient(main.app)
 
 
@@ -63,12 +61,16 @@ def test_second_turn_receives_history_from_the_database(env, monkeypatch):
     assert second[1]["content"] == "What's your budget?" and second[2]["content"] == "around 40k"
 
 
-def test_agent_failure_falls_back_to_the_legacy_engine(env, monkeypatch):
+def test_agent_failure_falls_back_to_a_safe_template_and_records_a_handoff(env, monkeypatch):
     db, client = env
     monkeypatch.setattr(service, "_provider", ScriptedProvider([ProviderError("mistral down")]))
     r = post(client, "How much is the Galaxy A15?")
     assert r.status_code == 200 and r.json()["success"] and r.json()["reply"]
-    assert "agent" not in r.json()["intelligence"]     # legacy path answered
+    body = r.json()
+    assert "agent" not in body["intelligence"] and body["intelligence"]["intent"] == "handoff"
+    assert body["intelligence"]["handoff_recorded"] is True
+    assert BUSINESS_A["phone"] in body["reply"]           # real business contact, never invented
+    assert db.tables["escalations"][0]["business_id"] == SHOP_A
 
 
 def test_grounding_failure_falls_back_instead_of_shipping_a_wrong_price(env, monkeypatch):
@@ -78,13 +80,14 @@ def test_grounding_failure_falls_back_instead_of_shipping_a_wrong_price(env, mon
     assert r.status_code == 200 and "10,000" not in r.json()["reply"] and "11,000" not in r.json()["reply"]
 
 
-def test_flag_off_means_legacy_only(env, monkeypatch):
+def test_flag_off_means_handoff_only_no_model_is_ever_called(env, monkeypatch):
     db, client = env
     monkeypatch.setattr(service.settings, "agent_mode", "off")
     prov = ScriptedProvider([say("SHOULD NOT BE USED")])
     monkeypatch.setattr(service, "_provider", prov)
     r = post(client, "How much is the Galaxy A15?")
     assert r.status_code == 200 and prov.seen == [] and "SHOULD NOT" not in r.json()["reply"]
+    assert r.json()["intelligence"]["intent"] == "handoff"
 
 
 def test_auth_and_tenant_checks_still_guard_the_agent_route(env, monkeypatch):
