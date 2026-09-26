@@ -80,13 +80,14 @@ def test_grounding_failure_falls_back_instead_of_shipping_a_wrong_price(env, mon
     assert r.status_code == 200 and "10,000" not in r.json()["reply"] and "11,000" not in r.json()["reply"]
 
 
-def test_flag_off_means_legacy_only(env, monkeypatch):
+def test_flag_off_means_handoff_only_no_model_is_ever_called(env, monkeypatch):
     db, client = env
     monkeypatch.setattr(service.settings, "agent_mode", "off")
     prov = ScriptedProvider([say("SHOULD NOT BE USED")])
     monkeypatch.setattr(service, "_provider", prov)
     r = post(client, "How much is the Galaxy A15?")
     assert r.status_code == 200 and prov.seen == [] and "SHOULD NOT" not in r.json()["reply"]
+    assert r.json()["intelligence"]["intent"] == "handoff"
 
 
 def test_auth_and_tenant_checks_still_guard_the_agent_route(env, monkeypatch):
