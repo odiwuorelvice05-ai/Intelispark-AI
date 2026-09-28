@@ -99,8 +99,10 @@ class MistralProvider(AIProvider):
             kwargs.update(tools=self._wire_tools(tools), tool_choice=tool_choice, parallel_tool_calls=False)
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
-        if self.reasoning_effort:
-            kwargs["reasoning_effort"] = self.reasoning_effort
+        # Do not forward reasoning_effort to Mistral Chat Completions here. The
+        # agent supports the setting internally, but not every deployed Mistral
+        # model/API combination accepts that request parameter. Sending it can
+        # make every intelligence turn fail before the model responds.
         started = time.monotonic()
         try:
             resp = self._client.chat.complete(**kwargs)
