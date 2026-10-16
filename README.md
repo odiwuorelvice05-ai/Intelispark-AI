@@ -43,9 +43,9 @@ CUSTOMER
 
 ## Intelligence Core
 
-The project keeps a local supervised machine-learning model as its first-line intelligence and adds an **optional Mistral Small 4 language-understanding supplement** for ambiguous, contextual, or low-confidence messages. Mistral does not replace the local engine and is never the source of truth. Supabase remains authoritative for business and product facts.
+The tool-calling agent uses **Google Gemini** for natural-language understanding, tool selection, and grounded reply drafting. Gemini is not the source of truth: Supabase remains authoritative for business and product facts, and every model-proposed tool call is validated and tenant-scoped before execution.
 
-When `MISTRAL_API_KEY` is absent, Intelispark continues to operate entirely through its local intelligence. When configured, Mistral is called selectively to conserve tokens and improve natural-language understanding.
+Configure `GEMINI_API_KEY` and `GEMINI_MODEL` to enable the agent. API access may be available on Google's free tier subject to current eligibility and usage limits. If the provider is unavailable or a reply fails grounding checks, the existing safe handoff path remains in place.
 
 ### Intelligence pipeline
 
@@ -54,7 +54,7 @@ Customer WhatsApp message
       ↓
 Local trained intent model
       ↓
-Selective Mistral language understanding (only when needed)
+Gemini tool-calling agent
       ↓
 Conversation context
       ↓
@@ -106,7 +106,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the local environment. Optionally configure `MISTRAL_API_KEY` and `MISTRAL_MODEL`. Never commit `.env` or secret credentials.
+Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the local environment. Configure `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`). Never commit `.env` or secret credentials.
 
 ## Product roadmap
 
