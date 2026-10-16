@@ -4,10 +4,10 @@
 
 | Target | Before this change | Phase 1 |
 |---|---|---|
-| Model does the language understanding | TF-IDF/LogReg classifier on hand-written examples + regex brand/type/budget lists (`brain_v03.py`); Mistral only produced "guidance" JSON that was merged back into that pipeline | Foundation model reads the raw message and chooses tools/arguments |
+| Model does the language understanding | TF-IDF/LogReg classifier on hand-written examples + regex brand/type/budget lists (`brain_v03.py`); Gemini only produced "guidance" JSON that was merged back into that pipeline | Foundation model reads the raw message and chooses tools/arguments |
 | Model chooses tools | none; fixed pipeline | native function calling, 8 tools + a structured final tool |
-| Retrieval on demand | whole catalog (200 rows) serialized into every Mistral call | `search_products` returns only matching rows |
-| Provider-neutral | `mistral_assist.py` hard-wired to Mistral | `AIProvider` interface; Mistral is one implementation |
+| Retrieval on demand | whole catalog (200 rows) serialized into every Gemini call | `search_products` returns only matching rows |
+| Provider-neutral | `Gemini provider` hard-wired to Gemini | `AIProvider` interface; Gemini is one implementation |
 | Evidence over eloquence | database facts rendered by Python templates | model writes the reply; `grounding.py` rejects any price/stock/order claim tools did not support |
 | Conversation memory | last 8 messages as text | history + structured state (`save_conversation_state`), durable once the proposed column exists |
 | Escalation | none | `escalate_to_owner` (durable once the proposed table exists; otherwise the agent gives the shop's phone number) |
@@ -40,9 +40,9 @@ customer message -> POST /sales/reply (owner auth + business ownership check, un
 | Variable | Default | Meaning |
 |---|---|---|
 | `INTELISPARK_AGENT` | `off` | `on` enables the agent |
-| `AI_PROVIDER` | `mistral` | provider factory key |
-| `MISTRAL_API_KEY` | – | required for the agent |
-| `AGENT_MODEL` | `MISTRAL_MODEL` or `mistral-small-latest` | change to compare models |
+| `AI_PROVIDER` | `gemini` | provider factory key |
+| `GEMINI_API_KEY` | – | required for the agent |
+| `AGENT_MODEL` | `GEMINI_MODEL` or `gemini-2.5-flash` | change to compare models |
 | `AGENT_DEADLINE_S` | `20` | total time budget per customer message |
 | `AGENT_HISTORY_MESSAGES` | `12` | chat history given to the model |
 
@@ -50,9 +50,9 @@ customer message -> POST /sales/reply (owner auth + business ownership check, un
 
 ```
 pip install -r requirements-dev.txt
-MISTRAL_API_KEY=... python -m scripts.agent_demo                 # the brief's conversation, every decision printed
-MISTRAL_API_KEY=... python -m tests.agent.eval_live --verbose --out report.json
-MISTRAL_API_KEY=... python -m tests.agent.eval_live --model mistral-medium-latest   # compare models
+GEMINI_API_KEY=... python -m scripts.agent_demo                 # the brief's conversation, every decision printed
+GEMINI_API_KEY=... python -m tests.agent.eval_live --verbose --out report.json
+GEMINI_API_KEY=... python -m tests.agent.eval_live --model gemini-2.5-pro   # compare models
 pytest                                                            # machinery tests, no key needed
 ```
 
