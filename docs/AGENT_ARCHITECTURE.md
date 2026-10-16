@@ -4,10 +4,10 @@
 
 | Target | Before this change | Phase 1 |
 |---|---|---|
-| Model does the language understanding | TF-IDF/LogReg classifier on hand-written examples + regex brand/type/budget lists (`brain_v03.py`); Gemini only produced "guidance" JSON that was merged back into that pipeline | Foundation model reads the raw message and chooses tools/arguments |
+| Model does the language understanding | TF-IDF/LogReg classifier on hand-written examples + regex brand/type/budget lists (`brain_v03.py`); legacy language guidance was merged back into that pipeline | Foundation model reads the raw message and chooses tools/arguments |
 | Model chooses tools | none; fixed pipeline | native function calling, 8 tools + a structured final tool |
-| Retrieval on demand | whole catalog (200 rows) serialized into every Gemini call | `search_products` returns only matching rows |
-| Provider-neutral | `Gemini provider` hard-wired to Gemini | `AIProvider` interface; Gemini is one implementation |
+| Retrieval on demand | whole catalog (200 rows) serialized into each legacy language-model call | `search_products` returns only matching rows |
+| Provider-neutral | provider-specific legacy helper | `AIProvider` interface; Gemini implements the provider contract |
 | Evidence over eloquence | database facts rendered by Python templates | model writes the reply; `grounding.py` rejects any price/stock/order claim tools did not support |
 | Conversation memory | last 8 messages as text | history + structured state (`save_conversation_state`), durable once the proposed column exists |
 | Escalation | none | `escalate_to_owner` (durable once the proposed table exists; otherwise the agent gives the shop's phone number) |
@@ -22,10 +22,10 @@ customer message -> POST /sales/reply (owner auth + business ownership check, un
        AgentRunner: model <-> tools (validated, tenant-scoped) ... -> respond_to_customer
        grounding check -> (one retry with the violations) -> answer
   -> answer saved to `messages`, same response shape the dashboard already reads
-  -> any failure (no key, provider error, timeout, grounding failed twice) => legacy engine answers as before
+  -> any failure (no key, provider error, timeout, grounding failed twice) => safe handoff template + owner notification path
 ```
 
-`INTELISPARK_AGENT` defaults to `off`: deploying this code changes nothing until you set it to `on`.
+`INTELISPARK_AGENT` defaults to `on`. Set it to `off` to disable model-driven tool calling.
 
 ## Safety properties (each has a test)
 
