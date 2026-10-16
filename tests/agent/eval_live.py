@@ -132,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     from app.agent.providers import get_provider
     from app.config import settings
-    provider = get_provider(settings.ai_provider, api_key=settings.gemini_api_key, model=a.model or settings.agent_model, reasoning_effort=settings.agent_reasoning_effort or None)
+    provider = get_provider(settings.ai_provider, api_key=settings.gemini_api_key, model=a.model or settings.agent_model)
     if not provider.enabled:
         print("No model configured. Set GEMINI_API_KEY (and optionally AGENT_MODEL) and run again.")
         return 2
