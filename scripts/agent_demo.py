@@ -1,6 +1,6 @@
 """Run the design-brief conversation against a REAL model and print every decision.
 
-    MISTRAL_API_KEY=... python -m scripts.agent_demo
+    GEMINI_API_KEY=... python -m scripts.agent_demo
 
 Uses the fictional fixture shop (tests/agent/fixtures.py), not your Supabase data.
 Read the transcript: the tool calls the model chose, the arguments it produced from
@@ -24,9 +24,9 @@ TURNS = [
 def main() -> int:
     from app.agent.providers import get_provider
     from app.config import settings
-    provider = get_provider(settings.ai_provider, api_key=settings.mistral_api_key, model=settings.agent_model)
+    provider = get_provider(settings.ai_provider, api_key=settings.gemini_api_key, model=settings.agent_model)
     if not provider.enabled:
-        print("No model configured. Set MISTRAL_API_KEY and run again.")
+        print("No model configured. Set GEMINI_API_KEY and run again.")
         return 2
     print(f"model: {provider.name}:{provider.model}\n")
     for rec in run_conversation(provider, TURNS):
