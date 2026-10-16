@@ -16,9 +16,9 @@ class GeminiProvider(AIProvider):
     name = "gemini"
     API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 
-    def __init__(self, api_key: str = "", model: str = "gemini-2.5-flash", client: Any = None) -> None:
+    def __init__(self, api_key: str = "", model: str = "gemini-3.8-flash", client: Any = None) -> None:
         self.api_key = api_key.strip()
-        self.model = model or "gemini-2.5-flash"
+        self.model = model or "gemini-3.8-flash"
         # client is an optional injectable callable used by unit tests.
         self._client = client
 
