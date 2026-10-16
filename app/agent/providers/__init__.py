@@ -4,10 +4,10 @@ from app.agent.providers.base import AIProvider, ProviderError, ProviderUnavaila
 
 
 def get_provider(name: str, *, api_key: str = "", model: str = "", reasoning_effort: str | None = None) -> AIProvider:
-    """Factory. Add a vendor by adding a branch here and one AIProvider subclass."""
-    if name == "mistral":
-        from app.agent.providers.mistral import MistralProvider
-        return MistralProvider(api_key=api_key, model=model or "mistral-small-latest", reasoning_effort=reasoning_effort)
+    """Provider factory. The agent loop and its contracts stay vendor-neutral."""
+    if name == "gemini":
+        from app.agent.providers.gemini import GeminiProvider
+        return GeminiProvider(api_key=api_key, model=model or "gemini-2.5-flash")
     raise ProviderUnavailable(f"unknown AI provider: {name!r}")
 
 
