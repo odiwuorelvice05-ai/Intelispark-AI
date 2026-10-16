@@ -34,7 +34,10 @@ class GeminiProvider(AIProvider):
         if not isinstance(value, dict):
             return value
         unsupported = {"additionalProperties", "$schema", "$defs", "definitions", "title", "default"}
-        return {k: GeminiProvider._schema(v) for k, v in value.items() if k not in unsupported}
+        return {
+            k: (v.upper() if k == "type" and isinstance(v, str) else GeminiProvider._schema(v))
+            for k, v in value.items() if k not in unsupported
+        }
 
     @classmethod
     def _wire_tools(cls, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
