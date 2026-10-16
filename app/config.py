@@ -20,7 +20,6 @@ class Settings:
     agent_mode: str = os.getenv("INTELISPARK_AGENT", "on").strip().lower()
     ai_provider: str = os.getenv("AI_PROVIDER", "gemini").strip().lower()
     agent_model: str = os.getenv("AGENT_MODEL", "").strip() or gemini_model
-    agent_reasoning_effort: str = os.getenv("AGENT_REASONING_EFFORT", "").strip()
     agent_deadline_s: float = float(os.getenv("AGENT_DEADLINE_S", "20"))
     agent_history_messages: int = int(os.getenv("AGENT_HISTORY_MESSAGES", "12"))
 
