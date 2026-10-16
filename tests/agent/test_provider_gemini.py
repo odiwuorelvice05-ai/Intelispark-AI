@@ -39,13 +39,17 @@ def test_translates_system_history_tools_and_function_responses():
         {"role": "assistant", "content": "", "tool_calls": [
             {"id": "abc", "name": "search_products", "arguments": {"brand": "Samsung"}}]},
         {"role": "tool", "tool_call_id": "abc", "name": "search_products", "content": '{"items": []}'},
+        {"role": "tool", "tool_call_id": "def", "name": "get_business_info", "content": '{"name": "Shop"}'},
     ], TOOLS, timeout_s=9)
     payload = client.payload
     assert payload["systemInstruction"]["parts"][0]["text"] == "system instructions"
     assert payload["contents"][0] == {"role": "user", "parts": [{"text": "hi"}]}
     assert payload["contents"][1]["parts"][0]["functionCall"]["name"] == "search_products"
+    assert len(payload["contents"][2]["parts"]) == 2
     assert payload["contents"][2]["parts"][0]["functionResponse"]["response"] == {"items": []}
+    assert payload["contents"][2]["parts"][1]["functionResponse"]["response"] == {"name": "Shop"}
     assert payload["tools"][0]["functionDeclarations"][0]["name"] == "search_products"
+    assert payload["tools"][0]["functionDeclarations"][0]["parameters"]["type"] == "OBJECT"
     assert "additionalProperties" not in payload["tools"][0]["functionDeclarations"][0]["parameters"]
     assert client.timeout == 9
     assert turn.tool_calls[0].arguments == {"brand": "Samsung", "max_price_kes": 50000}
