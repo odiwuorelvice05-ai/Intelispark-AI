@@ -54,6 +54,15 @@ class GeminiProvider(AIProvider):
     def _wire_messages(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
         system_parts: list[str] = []
         contents: list[dict[str, Any]] = []
+
+        def append_turn(role: str, parts: list[dict[str, Any]]) -> None:
+            # Gemini expects one user turn containing all function responses for
+            # a model turn; merge adjacent same-role content parts accordingly.
+            if contents and contents[-1]["role"] == role:
+                contents[-1]["parts"].extend(parts)
+            else:
+                contents.append({"role": role, "parts": parts})
+
         for message in messages:
             role = message.get("role", "user")
             content = message.get("content") or ""
@@ -68,9 +77,9 @@ class GeminiProvider(AIProvider):
                     response = {"result": str(content)}
                 if not isinstance(response, dict):
                     response = {"result": response}
-                contents.append({"role": "user", "parts": [{"functionResponse": {
+                append_turn("user", [{"functionResponse": {
                     "name": message.get("name", "tool"), "response": response
-                }}]})
+                }}])
                 continue
             parts: list[dict[str, Any]] = []
             for call in message.get("tool_calls") or []:
@@ -81,7 +90,7 @@ class GeminiProvider(AIProvider):
             if content:
                 parts.insert(0, {"text": str(content)})
             if parts:
-                contents.append({"role": "model" if role == "assistant" else "user", "parts": parts})
+                append_turn("model" if role == "assistant" else "user", parts)
         return "\n\n".join(system_parts), contents
 
     @staticmethod
