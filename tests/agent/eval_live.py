@@ -1,9 +1,9 @@
 """Agent evaluation: run unseen customer messages through the REAL agent loop and score
 tool choice, tool arguments, retrieval, decision, answer content and groundedness.
 
-    MISTRAL_API_KEY=... python -m tests.agent.eval_live                # all cases
+    GEMINI_API_KEY=... python -m tests.agent.eval_live                # all cases
     python -m tests.agent.eval_live --tags sheng,multi-turn --verbose
-    python -m tests.agent.eval_live --model mistral-medium-latest --out report_medium.json
+    python -m tests.agent.eval_live --model gemini-2.5-pro --out report_medium.json
 
 The cases in eval_cases.jsonl are NEVER shown to the model as examples: they are only
 inputs to be judged. Content checks are coarse on purpose (a human should still read the
@@ -132,9 +132,9 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     from app.agent.providers import get_provider
     from app.config import settings
-    provider = get_provider(settings.ai_provider, api_key=settings.mistral_api_key, model=a.model or settings.agent_model, reasoning_effort=settings.agent_reasoning_effort or None)
+    provider = get_provider(settings.ai_provider, api_key=settings.gemini_api_key, model=a.model or settings.agent_model, reasoning_effort=settings.agent_reasoning_effort or None)
     if not provider.enabled:
-        print("No model configured. Set MISTRAL_API_KEY (and optionally AGENT_MODEL) and run again.")
+        print("No model configured. Set GEMINI_API_KEY (and optionally AGENT_MODEL) and run again.")
         return 2
     cases = load_cases(tags=set(filter(None, a.tags.split(","))), ids=set(filter(None, a.ids.split(","))))
     report = evaluate(provider, cases, a.verbose)
