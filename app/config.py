@@ -14,7 +14,7 @@ class Settings:
 
     # Gemini is the sole hosted language-model provider for the intelligence engine.
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "").strip()
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
 
     # Keep the existing tool-calling agent and response contracts unchanged.
     agent_mode: str = os.getenv("INTELISPARK_AGENT", "on").strip().lower()
