@@ -3,7 +3,7 @@ from __future__ import annotations
 from app.agent.providers.base import AIProvider, ProviderError, ProviderUnavailable
 
 
-def get_provider(name: str, *, api_key: str = "", model: str = "", reasoning_effort: str | None = None) -> AIProvider:
+def get_provider(name: str, *, api_key: str = "", model: str = "") -> AIProvider:
     """Provider factory. The agent loop and its contracts stay vendor-neutral."""
     if name == "gemini":
         from app.agent.providers.gemini import GeminiProvider
