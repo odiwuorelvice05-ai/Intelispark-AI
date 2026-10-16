@@ -77,10 +77,11 @@ Conversation stored in Supabase
 - Logistic Regression intent classifier
 - Domain training dataset focused on electronics commerce and Kenyan/WhatsApp language
 - Intent classes: greeting, price, availability, purchase, recommendation, comparison, installment, location, delivery, appointment, thanks, general
-- Model trains locally when the application starts
-- Product facts are grounded in the shop's Supabase catalog
-- Conversation history is used as context
-- No external generative AI API is required
+- The lightweight local classifier remains available as a fallback component
+- The tool-calling sales agent uses Gemini when `GEMINI_API_KEY` is configured
+- Product facts are grounded in the shop's Supabase catalog; model outputs never replace database facts
+- Conversation history and structured state are used as context
+- If Gemini is unavailable or its reply fails grounding checks, the endpoint uses the existing safe handoff path
 
 ### Product knowledge layer
 
