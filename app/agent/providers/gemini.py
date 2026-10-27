@@ -16,9 +16,9 @@ class GeminiProvider(AIProvider):
     name = "gemini"
     API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 
-    def __init__(self, api_key: str = "", model: str = "gemini-3.8-flash", client: Any = None) -> None:
+    def __init__(self, api_key: str = "", model: str = "gemini-2.5-flash", client: Any = None) -> None:
         self.api_key = api_key.strip()
-        self.model = model or "gemini-3.8-flash"
+        self.model = model or "gemini-2.5-flash"
         # client is an optional injectable callable used by unit tests.
         self._client = client
 
@@ -158,13 +158,14 @@ class GeminiProvider(AIProvider):
             if self._client:
                 response = self._client(payload=payload, timeout_s=timeout_s)
             else:
-                url = f"{self.API_ROOT}/{quote(self.model, safe='')}:generateContent?key={quote(self.api_key, safe='')}"
+                # Send the key in a header rather than the URL to reduce exposure in logs.
+                url = f"{self.API_ROOT}/{quote(self.model, safe='')}:generateContent"
                 request = Request(url, data=json.dumps(payload).encode("utf-8"),
-                                  headers={"Content-Type": "application/json"}, method="POST")
+                                  headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
+                                  method="POST")
                 with urlopen(request, timeout=timeout_s) as result:
                     response = json.loads(result.read().decode("utf-8"))
         except HTTPError as exc:
-            # Do not log request URLs or credentials; API keys are URL query parameters.
             raise ProviderError(f"Gemini request failed: HTTP {exc.code}") from exc
         except (URLError, TimeoutError, OSError) as exc:
             raise ProviderError(f"Gemini request failed: {type(exc).__name__}") from exc
