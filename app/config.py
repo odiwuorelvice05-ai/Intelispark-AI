@@ -12,9 +12,9 @@ class Settings:
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
-    # Gemini is the sole hosted language-model provider for the intelligence engine.
+    # Gemini 2.5 Flash matches the model already configured for the preview deployment.
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "").strip()
-    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 
     # Keep the existing tool-calling agent and response contracts unchanged.
     agent_mode: str = os.getenv("INTELISPARK_AGENT", "on").strip().lower()
