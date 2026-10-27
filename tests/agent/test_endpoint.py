@@ -63,7 +63,7 @@ def test_second_turn_receives_history_from_the_database(env, monkeypatch):
 
 def test_agent_failure_falls_back_to_a_safe_template_and_records_a_handoff(env, monkeypatch):
     db, client = env
-    monkeypatch.setattr(service, "_provider", ScriptedProvider([ProviderError("mistral down")]))
+    monkeypatch.setattr(service, "_provider", ScriptedProvider([ProviderError("Gemini unavailable")]))
     r = post(client, "How much is the Galaxy A15?")
     assert r.status_code == 200 and r.json()["success"] and r.json()["reply"]
     body = r.json()
